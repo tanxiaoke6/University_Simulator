@@ -4,11 +4,10 @@ import type { LLMConfig, StudentState, GameEvent, EventChoice, GameDate } from '
 // Generate unique ID
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// Timeout helper
 const withTimeout = (promise: Promise<any>, ms: number) => {
     return Promise.race([
         promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('LLM API Timeout (5s)')), ms))
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`LLM API Timeout (${ms / 1000}s)`)), ms))
     ]);
 };
 
@@ -163,25 +162,34 @@ export const callLLM = async (
 
     switch (provider) {
         case 'openai':
+        case 'custom': // Custom provider uses OpenAI-compatible format
             // Robust base URL handling: trim trailing slashes and ensure /chat/completions is present
-            const base = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
-            endpoint = `${base}/chat/completions`;
-            headers['Authorization'] = `Bearer ${apiKey}`;
-            body = { model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: maxTokens, temperature };
+            {
+                const base = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+                endpoint = `${base}/chat/completions`;
+                headers['Authorization'] = `Bearer ${apiKey}`;
+                body = { model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: maxTokens, temperature };
+            }
             break;
         case 'gemini':
             endpoint = baseUrl || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             body = { contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { maxOutputTokens: maxTokens, temperature } };
             break;
         default:
-            throw new Error(`Support for ${provider} in robust mode pending.`);
+            // Fallback to OpenAI-compatible format for unknown providers
+            {
+                const fallbackBase = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+                endpoint = `${fallbackBase}/chat/completions`;
+                headers['Authorization'] = `Bearer ${apiKey}`;
+                body = { model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], max_tokens: maxTokens, temperature };
+            }
     }
 
     const response = await withTimeout(fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-    }), 5000) as Response;
+    }), 15000) as Response;
 
     if (!response.ok) {
         const error = await response.text();
@@ -189,9 +197,9 @@ export const callLLM = async (
     }
 
     const data = await response.json();
-    if (provider === 'openai') return data.choices?.[0]?.message?.content || '';
+    if (provider === 'openai' || provider === 'custom') return data.choices?.[0]?.message?.content || '';
     if (provider === 'gemini') return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return '';
+    return data.choices?.[0]?.message?.content || '';
 };
 
 // Generate dynamic event with fallback
@@ -230,10 +238,238 @@ export const testLLMConnection = async (config: LLMConfig): Promise<{ success: b
             config,
             'You are a helpful assistant.',
             'Reply with just the word "connected" if you can read this.'
-        ), 5000);
+        ), 30000); // 30 second timeout for test
         const success = response.toLowerCase().includes('connected');
         return { success, error: success ? undefined : 'API 响应不匹配' };
     } catch (error: any) {
         return { success: false, error: error.message || '连接失败' };
+    }
+};
+
+// ============ Forum LLM Integration ============
+
+const FORUM_SYSTEM_PROMPT = `你是一个中国大学论坛的模拟器。根据学生当前的状态和游戏时间，生成3-5条贴近现实的论坛帖子。
+帖子应该反映校园生活、考试、社交等话题。如果有即将到来的考试或事件，要生成相关的帖子。
+返回JSON格式: { "posts": ["帖子1", "帖子2", ...] }`;
+
+const MOCK_FORUM_POSTS = [
+    "听说二食堂的红烧肉涨价了，真实度 80%...",
+    "这周的数学建模比赛题目太变态了吧！",
+    "求问：哪位教授的期末考比较容易过？",
+    "图书馆占座大战，今天又失败了...",
+    "有没有人一起组队考研？",
+];
+
+export interface ForumComment {
+    id: string;
+    author: string;
+    content: string;
+    timestamp: number;
+}
+
+export interface ForumPost {
+    id: string;
+    content: string;
+    author: string;
+    likes: number;
+    liked: boolean;
+    time: string;
+    comments: ForumComment[];
+}
+
+export const generateForumPosts = async (
+    config: LLMConfig,
+    student: StudentState
+): Promise<ForumPost[]> => {
+    // Generate contextual hints
+    const pendingExamNames = student.pendingExams?.map(e => e.name).join(', ') || '';
+    const weekInfo = `第${student.currentDate.year}学年 第${student.currentDate.week}周`;
+
+    const contextHints = [];
+    if (student.currentDate.week >= 16) contextHints.push('期末考试周临近');
+    if (pendingExamNames) contextHints.push(`有人正在备考: ${pendingExamNames}`);
+    if (student.currentDate.week === 1) contextHints.push('新学期开始');
+
+    // Randomized author names for forum posts
+    const AUTHORS = ['李明', '王芳', '张伟', '刘洋', '陈静', '赵强', '孙丽', '周杰', '吴娜', '郑云'];
+
+    // Offline mode fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return MOCK_FORUM_POSTS.map((content, i) => ({
+            id: `forum_${i}`,
+            content,
+            author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
+            likes: Math.floor(Math.random() * 50),
+            liked: false,
+            time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+            comments: []
+        }));
+    }
+
+    try {
+        const userPrompt = `当前时间: ${weekInfo}\n背景提示: ${contextHints.join('; ') || '普通校园生活'}\n\n请生成5条论坛帖子。`;
+        const response = await callLLM(config, FORUM_SYSTEM_PROMPT, userPrompt);
+
+        let posts: string[] = [];
+        try {
+            const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response];
+            const data = JSON.parse(jsonMatch[1]?.trim() || response.trim());
+            posts = data.posts || [];
+        } catch {
+            posts = MOCK_FORUM_POSTS;
+        }
+
+        return posts.map((content, i) => ({
+            id: `forum_${Date.now()}_${i}`,
+            content: typeof content === 'string' ? content : String(content),
+            author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
+            likes: Math.floor(Math.random() * 50),
+            liked: false,
+            time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+            comments: []
+        }));
+    } catch (error) {
+        console.error('Forum LLM failed:', error);
+        const AUTHORS = ['李明', '王芳', '张伟', '刘洋', '陈静', '赵强', '孙丽', '周杰', '吴娜', '郑云'];
+        return MOCK_FORUM_POSTS.map((content, i) => ({
+            id: `forum_fallback_${i}`,
+            content,
+            author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
+            likes: Math.floor(Math.random() * 20),
+            liked: false,
+            time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+            comments: []
+        }));
+    }
+};
+
+// ============ WeChat NPC Chat Integration ============
+
+const NPC_CHAT_SYSTEM_PROMPT = `你正在扮演一个中国大学生活模拟游戏中的NPC角色。
+你的任务是根据NPC的性格和背景，用自然、口语化的中文回复用户的消息。
+回复应该简短（1-3句话），符合角色设定，可以带有表情符号。
+直接返回回复内容，不要包含任何JSON或额外格式。`;
+
+const GAME_ASSISTANT_PROMPT = `你是"大学生活模拟器"游戏中的AI助手。
+你的任务是帮助玩家了解游戏机制、给出建议、解答问题。
+你了解游戏的所有系统：行动力(每周7点)、属性(IQ/EQ/体力/压力/魅力/运气)、证书考试、兼职工作等。
+用友好、简洁的中文回复，可以带表情符号。直接返回回复内容。`;
+
+export const generateNPCReply = async (
+    config: LLMConfig,
+    npc: { name: string; personality: string; role: string },
+    userMessage: string,
+    chatHistory: { role: 'user' | 'npc'; content: string }[],
+    isGameAssistant: boolean = false
+): Promise<string> => {
+    const systemPrompt = isGameAssistant ? GAME_ASSISTANT_PROMPT : NPC_CHAT_SYSTEM_PROMPT;
+
+    // Build conversation context
+    const historyContext = chatHistory.slice(-6).map(msg =>
+        `${msg.role === 'user' ? '玩家' : npc.name}: ${msg.content}`
+    ).join('\n');
+
+    const userPrompt = isGameAssistant
+        ? `${historyContext}\n玩家: ${userMessage}\n\n请回复玩家的问题。`
+        : `NPC信息:\n- 名字: ${npc.name}\n- 角色: ${npc.role}\n- 性格: ${npc.personality}\n\n对话记录:\n${historyContext}\n玩家: ${userMessage}\n\n请以${npc.name}的身份回复。`;
+
+    // Offline fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        const fallbacks = isGameAssistant
+            ? ['这个问题我暂时回答不了，建议你探索一下游戏！🎮', '试试看不同的选择，可能会有惊喜哦！✨', '记得管理好你的行动力和体力！💪']
+            : ['哈哈，你说得对！', '最近怎么样啊？', '有空一起去食堂吃饭吧！', '考试复习得怎么样了？'];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 30000); // 30s timeout
+        return response.trim() || '...(沉默)';
+    } catch (error) {
+        console.error('NPC Chat LLM failed:', error);
+        return isGameAssistant ? '抱歉，我现在有点忙，稍后再聊！' : '...(对方似乎在忙)';
+    }
+};
+
+/**
+ * Generates a proactive message from an NPC to the player.
+ * Used when an NPC "decides" to text the player first.
+ */
+export const generateProactiveMessage = async (
+    config: LLMConfig,
+    npc: { name: string; personality: string; role: string },
+    student: StudentState
+): Promise<string> => {
+    const { year, semester, week } = student.currentDate;
+    const timeInfo = `第${year}学年, ${semester === 1 ? '上学期' : '下学期'}, 第${week}周`;
+
+    const systemPrompt = `你正在扮演一个中国大学生活模拟游戏中的NPC角色：${npc.name}。
+你的角色是玩家的${npc.role}，性格是${npc.personality}。
+你的任务是主动给玩家发一条微信消息。消息应该自然、口语化，反映当前的校园生活背景。
+背景时间：${timeInfo}。
+如果是学期初，可以问候开学；如果是学期末，可以提考试或放假；平时可以聊八卦、约饭或分享趣事。
+回复应该简短（1-2句），直接返回消息内容。`;
+
+    const userPrompt = `由于现在是${timeInfo}，请以${npc.name}的身份给玩家发一条开场白。`;
+
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        const fallbacks = [
+            '嘿，最近在忙什么呢？',
+            '今天食堂的饭菜不错，要不要一起去？',
+            '感觉这周的课好累啊，你呢？',
+            '刚才在图书馆看到你了，感觉你学得好认真！',
+            '周末有空吗？想约你出去玩。'
+        ];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 15000);
+        return response.trim() || '最近怎么样？';
+    } catch (error) {
+        console.error('Proactive message LLM failed:', error);
+        return '最近怎么样？';
+    }
+};
+
+/**
+ * Generates a WeChat moment content for an NPC.
+ */
+export const generateMoment = async (
+    config: LLMConfig,
+    npc: { name: string; personality: string; role: string },
+    gameDate: { year: number; semester: number; week: number }
+): Promise<string> => {
+    const timeInfo = `第${gameDate.year}学年, ${gameDate.semester === 1 ? '上学期' : '下学期'}, 第${gameDate.week}周`;
+
+    const systemPrompt = `你正在扮演一个中国大学生NPC：${npc.name}。
+角色：玩家的${npc.role}，性格：${npc.personality}。
+任务：发一条微信朋友圈。
+要求：
+1. 内容简短（1-3句），口语化。
+2. 结合当前时间（${timeInfo}）和校园生活。
+3. 可以带点情绪或吐槽，或者分享日常生活。
+4. 不需要带话题标签。
+直接返回朋友圈正文内容。`;
+
+    const userPrompt = `请生成一条朋友圈内容。`;
+
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        const fallbacks = [
+            '今天天气真不错，适合去图书馆刷题！',
+            '食堂的麻辣香锅越来越好吃了，推荐！',
+            '又要交作业了，赶死线中...',
+            '周末有没有人一起去看电影？',
+            '刚跑完步，感觉整个人都精神了。',
+            '这周的课好多啊，求安慰。'
+        ];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 15000);
+        return response.trim() || '今天心情不错！';
+    } catch (error) {
+        console.error('Moment generation LLM failed:', error);
+        return '今天心情不错！';
     }
 };

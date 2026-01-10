@@ -1,67 +1,34 @@
-import { useState } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import {
     Calendar,
     Sparkles,
     ChevronRight,
-    Smartphone as PhoneIcon,
-    LayoutDashboard,
 } from 'lucide-react';
-import Smartphone from './Smartphone';
-import AcademicPlanner from './AcademicPlanner';
 
 export default function ActionPanel() {
     const { student, nextTurn, isLoading } = useGameStore();
-    const [activeDashboardTab, setActiveDashboardTab] = useState<'phone' | 'planner'>('phone');
 
     if (!student) return null;
 
     const actionPoints = student.actionPoints || 0;
-    const maxActionPoints = student.maxActionPoints || 3;
+    const maxActionPoints = student.maxActionPoints || 7;
 
     return (
-        <div className="space-y-6">
-            {/* Header: AP Indicator & Tab Switcher */}
+        <div className="space-y-4">
+            {/* Header: AP Indicator */}
             <div className="flex items-center justify-between pb-4 border-b border-dark-800/50">
-                <div className="flex items-center gap-8">
-                    {/* Action Points */}
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-dark-500 uppercase tracking-widest">本周行动力</span>
-                        <div className="flex gap-1.5 mt-1">
-                            {Array.from({ length: maxActionPoints }).map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`w-8 h-2 rounded-full transition-all duration-500 ${i < actionPoints
-                                        ? 'bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
-                                        : 'bg-dark-800'
-                                        }`}
-                                />
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Dashboard Tab Switcher */}
-                    <div className="flex bg-dark-900 border border-dark-800 rounded-xl p-1">
-                        <button
-                            onClick={() => setActiveDashboardTab('phone')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeDashboardTab === 'phone'
-                                    ? 'bg-primary-600 text-white shadow-lg'
-                                    : 'text-dark-400 hover:text-dark-200'
-                                }`}
-                        >
-                            <PhoneIcon className="w-4 h-4" />
-                            手机 (Apps)
-                        </button>
-                        <button
-                            onClick={() => setActiveDashboardTab('planner')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeDashboardTab === 'planner'
-                                    ? 'bg-primary-600 text-white shadow-lg'
-                                    : 'text-dark-400 hover:text-dark-200'
-                                }`}
-                        >
-                            <LayoutDashboard className="w-4 h-4" />
-                            学业规划 (Planner)
-                        </button>
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-dark-500 uppercase tracking-widest">本周行动力</span>
+                    <div className="flex gap-1 mt-1">
+                        {Array.from({ length: maxActionPoints }).map((_, i) => (
+                            <div
+                                key={i}
+                                className={`w-5 h-2 rounded-full transition-all duration-500 ${i < actionPoints
+                                    ? 'bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
+                                    : 'bg-dark-800'
+                                    }`}
+                            />
+                        ))}
                     </div>
                 </div>
 
@@ -73,20 +40,9 @@ export default function ActionPanel() {
                 )}
             </div>
 
-            {/* Dashboard Content */}
-            <div className="min-h-[400px]">
-                {activeDashboardTab === 'phone' ? (
-                    <div className="flex justify-center">
-                        <Smartphone />
-                    </div>
-                ) : (
-                    <AcademicPlanner />
-                )}
-            </div>
-
             {/* Next Turn Button */}
             <div className="flex items-center justify-between pt-4 border-t border-dark-800/50">
-                <div className="flex items-center gap-2 text-dark-500 text-xs">
+                <div className="flex items-center gap-2 text-dark-500 text-xs text-balance">
                     <Calendar className="w-4 h-4" />
                     <span>第 {student.currentDate.week} 周 / {student.currentDate.semester === 1 ? '上学期' : '下学期'}</span>
                 </div>
@@ -100,7 +56,7 @@ export default function ActionPanel() {
                         }`}
                 >
                     {isLoading ? (
-                        <Sparkles className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                         <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
                     )}
@@ -110,4 +66,10 @@ export default function ActionPanel() {
             </div>
         </div>
     );
+}
+
+function Loader2({ className }: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+    )
 }

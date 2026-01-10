@@ -1,7 +1,9 @@
 // Goal Tracker Modal - Progress tracking for various career paths
-import { X, Target, Trophy, Briefcase, Globe, Landmark } from 'lucide-react';
+import { useState } from 'react';
+import { X, Target, Trophy, Briefcase, Globe, Landmark, ChevronRight, CheckCircle2, Circle, Rocket } from 'lucide-react';
 import { useGameStore } from '../stores/gameStore';
-import type { GoalType } from '../types';
+import { INITIAL_GOALS } from '../stores/gameData';
+import type { LifeGoal } from '../types';
 
 interface GoalTrackerModalProps {
     onClose: () => void;
@@ -9,108 +11,200 @@ interface GoalTrackerModalProps {
 
 export default function GoalTrackerModal({ onClose }: GoalTrackerModalProps) {
     const { student } = useGameStore();
+    const [selectedGoalId, setSelectedGoalId] = useState<string | null>(INITIAL_GOALS[0]?.id || null);
 
     if (!student) return null;
 
-    // Calculate progress for each goal (mock logic for now, using thresholds)
-    // In a real game, this would be computed from attributes, GPA, and hidden milestones
-    const calculateProgress = (id: GoalType): number => {
-        const { attributes, academic, money } = student;
+    const selectedGoal = INITIAL_GOALS.find(g => g.id === selectedGoalId);
 
-        switch (id) {
-            case 'baoyan': // Academic Pro: GPA > 3.8, IQ > 80
-                return Math.min(100, (academic.gpa / 4.0) * 60 + (attributes.iq / 100) * 40);
-            case 'kaoyan': // Exam Warrior: IQ > 70, Knowledge > 500
-                return Math.min(100, (attributes.iq / 100) * 30 + (academic.knowledgePoints / 1000) * 70);
-            case 'employment': // Job Ready: EQ > 70, Charm > 60
-                return Math.min(100, (attributes.eq / 100) * 50 + (attributes.charm / 100) * 50);
-            case 'abroad': // Global Student: Money > 200k, GPA > 3.5
-                return Math.min(100, (money / 300000) * 60 + (academic.gpa / 4.0) * 40);
-            case 'inheritance': // Family Business: Wealth / Money
-                return student.family.wealth === 'wealthy' ? 90 : (money / 1000000) * 100;
-            default:
-                return 0;
-        }
+    const calculateGoalProgress = (goal: LifeGoal): number => {
+        if (!goal.requirements || goal.requirements.length === 0) return 100;
+
+        let totalMet = 0;
+        goal.requirements.forEach(req => {
+            if (req.type === 'attribute') {
+                const current = (student.attributes as any)[req.target] || (student.academic as any)[req.target] || 0;
+                if (current >= req.value) totalMet++;
+            } else if (req.type === 'cet6') {
+                if (student.academic.cet6Score >= req.value) totalMet++;
+            } else if (req.type === 'honors') {
+                if (student.academic.honors.length >= req.value) totalMet++;
+            } else if (req.type === 'research') {
+                if (student.academic.researchPoints >= req.value) totalMet++;
+            } else if (req.type === 'wealth') {
+                const wealthMap: Record<string, number> = { poor: 1, middle: 2, wealthy: 3 };
+                if (wealthMap[student.family.wealth] >= req.value) totalMet++;
+            } else if (req.target === 'money') {
+                if (student.money >= req.value) totalMet++;
+            }
+        });
+
+        return (totalMet / goal.requirements.length) * 100;
     };
 
-    const goals: { id: GoalType; name: string; icon: React.ReactNode; color: string; desc: string }[] = [
-        { id: 'baoyan', name: '学术保研', icon: <Trophy />, color: 'text-primary-400', desc: '凭借卓越的GPA和科研能力获得免试入读研究生名额。' },
-        { id: 'kaoyan', name: '考研奋斗', icon: <BookOpen />, color: 'text-accent-400', desc: '备战全国硕士研究生统一入学考试，目标顶尖名校。' },
-        { id: 'employment', name: '名企就业', icon: <Briefcase />, color: 'text-green-400', desc: '积极参与实习，打磨简历，在校招中斩获心仪大厂Offer。' },
-        { id: 'abroad', name: '出国留学', icon: <Globe />, color: 'text-purple-400', desc: '准备语言考试和申请材料，目标QS世界排名前50名校。' },
-        { id: 'inheritance', name: '继承家业', icon: <Landmark />, color: 'text-orange-400', desc: '利用家庭资源创业或回归家族企业，开启接班人之路。' },
-    ];
+    const isRequirementMet = (req: any) => {
+        if (req.type === 'attribute') {
+            const current = (student.attributes as any)[req.target] || (student.academic as any)[req.target] || 0;
+            return current >= req.value;
+        } else if (req.type === 'cet6') {
+            return student.academic.cet6Score >= req.value;
+        } else if (req.type === 'honors') {
+            return student.academic.honors.length >= req.value;
+        } else if (req.type === 'research') {
+            return student.academic.researchPoints >= req.value;
+        } else if (req.type === 'wealth') {
+            const wealthMap: Record<string, number> = { poor: 1, middle: 2, wealthy: 3 };
+            return wealthMap[student.family.wealth] >= req.value;
+        } else if (req.target === 'money') {
+            return student.money >= req.value;
+        }
+        return false;
+    };
+
+    const getRequirementLabel = (req: any) => {
+        const labels: Record<string, string> = {
+            gpa: 'GPA',
+            iq: '智力',
+            eq: '情商',
+            knowledge: '知识储备',
+            cet6Score: '英语六级',
+            honorsCount: '竞赛奖项',
+            researchPoints: '科研成果',
+            wealth: '家庭背景',
+            money: '存款',
+            employability: '就业力'
+        };
+        return labels[req.target] || req.target;
+    };
+
+    const getGoalIconAndColor = (goalId: string) => {
+        let icon = <Trophy />;
+        let color = 'text-primary-400';
+        if (goalId === 'kaoyan') { icon = <BookOpen />; color = 'text-accent-400'; }
+        if (goalId === 'employment') { icon = <Briefcase />; color = 'text-green-400'; }
+        if (goalId === 'abroad') { icon = <Globe />; color = 'text-purple-400'; }
+        if (goalId === 'inheritance') { icon = <Landmark />; color = 'text-orange-400'; }
+        if (goalId === 'startup') { icon = <Rocket />; color = 'text-blue-400'; }
+        return { icon, color };
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-dark-950/80 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-dark-950/80 backdrop-blur-md animate-fade-in" onClick={onClose} />
 
-            {/* Modal */}
-            <div className="relative glass-card w-full max-w-2xl p-8 animate-scale-in">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-accent-500/20 flex items-center justify-center text-accent-400">
-                            <Target className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-display font-bold">人生目标</h2>
-                            <p className="text-dark-400 text-sm">当前的规划与未来可能性</p>
-                        </div>
+            <div className="relative glass-card w-full max-w-4xl max-h-[85vh] flex overflow-hidden animate-scale-in">
+                {/* Sidebar - Goal List */}
+                <div className="w-1/3 border-r border-dark-800 bg-dark-900/40 p-6 flex flex-col h-full">
+                    <div className="flex items-center gap-3 mb-8">
+                        <Target className="w-6 h-6 text-accent-500" />
+                        <h2 className="text-xl font-display font-bold text-white">人生目标</h2>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-dark-800 rounded-lg transition-colors cursor-pointer"
-                    >
-                        <X className="w-6 h-6 text-dark-500" />
-                    </button>
+
+                    <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                        {INITIAL_GOALS.map(goal => {
+                            const progress = calculateGoalProgress(goal);
+                            const isSelected = selectedGoalId === goal.id;
+                            const { icon, color } = getGoalIconAndColor(goal.id);
+                            return (
+                                <button
+                                    key={goal.id}
+                                    onClick={() => setSelectedGoalId(goal.id)}
+                                    className={`w-full text-left p-4 rounded-xl transition-all border flex items-center justify-between group ${isSelected
+                                        ? 'bg-dark-800 border-accent-500/50 shadow-lg shadow-accent-950/20'
+                                        : 'bg-dark-800/40 border-dark-700 hover:border-dark-600'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-accent-500/20 ' + color : 'bg-dark-700 text-dark-400'}`}>
+                                            {icon}
+                                        </div>
+                                        <div>
+                                            <p className={`font-bold transition-colors ${isSelected ? 'text-white' : 'text-dark-300'}`}>{goal.name}</p>
+                                            <div className="w-24 h-1 bg-dark-700 rounded-full mt-1.5 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-accent-500 transition-all duration-500"
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? 'text-accent-400 translate-x-1' : 'text-dark-600'}`} />
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
-                {/* Goals List */}
-                <div className="space-y-6">
-                    {goals.map((goal) => {
-                        const progress = calculateProgress(goal.id);
-                        return (
-                            <div key={goal.id} className="group">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-lg bg-dark-800 ${goal.color}`}>
-                                            {goal.icon}
-                                        </div>
-                                        <span className="font-bold text-dark-100">{goal.name}</span>
-                                    </div>
-                                    <span className={`text-sm font-mono ${goal.color}`}>
-                                        {progress.toFixed(1)}%
-                                    </span>
+                {/* Main Content - Detailed Requirements */}
+                <div className="flex-1 p-8 flex flex-col h-full bg-dark-950/20 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-dark-800">
+                        {selectedGoal ? (
+                            <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-2xl bg-dark-800 border border-dark-700`}>
+                                    {getGoalIconAndColor(selectedGoal.id).icon}
                                 </div>
-                                <div className="relative h-2 bg-dark-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={`absolute left-0 top-0 h-full transition-all duration-1000 ease-out`}
-                                        style={{
-                                            width: `${progress}%`,
-                                            background: `linear-gradient(90deg, transparent, currentColor)`,
-                                            backgroundColor: 'currentColor',
-                                            color: goal.color.replace('text-', '') === 'primary-400' ? '#60a5fa' :
-                                                goal.color.replace('text-', '') === 'accent-400' ? '#FACC15' :
-                                                    goal.color.replace('text-', '') === 'green-400' ? '#4ade80' :
-                                                        goal.color.replace('text-', '') === 'purple-400' ? '#c084fc' : '#fb923c'
-                                        }}
-                                    />
+                                <div>
+                                    <h3 className="text-2xl font-display font-bold text-white mb-1">{selectedGoal.name}</h3>
+                                    <p className="text-dark-400 text-sm">{selectedGoal.description}</p>
                                 </div>
-                                <p className="text-xs text-dark-500 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {goal.desc}
+                            </div>
+                        ) : (
+                            <div className="text-dark-500 italic">请选择一个目标以查看详情</div>
+                        )}
+                        <button onClick={onClose} className="p-2 hover:bg-dark-800 rounded-lg text-dark-500 hover:text-white transition-colors">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {selectedGoal && (
+                        <div className="space-y-8 animate-fade-in">
+                            <div>
+                                <h4 className="text-sm font-bold text-dark-300 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <div className="w-1 h-3 bg-accent-500 rounded-full" />
+                                    达成要求
+                                </h4>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {selectedGoal.requirements.map((req, idx) => {
+                                        const met = isRequirementMet(req);
+                                        const current = req.target === 'money' ? student.money :
+                                            ((student.attributes as any)[req.target] || (student.academic as any)[req.target] ||
+                                                (req.type === 'honors' ? student.academic.honors.length :
+                                                    req.type === 'research' ? student.academic.researchPoints : 0));
+
+                                        return (
+                                            <div key={idx} className={`p-4 rounded-xl border flex items-center justify-between ${met ? 'bg-green-500/5 border-green-500/20' : 'bg-dark-800/40 border-dark-700'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    {met ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Circle className="w-5 h-5 text-dark-600" />}
+                                                    <div>
+                                                        <p className={`font-bold ${met ? 'text-green-100' : 'text-dark-200'}`}>
+                                                            {getRequirementLabel(req)}
+                                                        </p>
+                                                        <p className="text-xs text-dark-500 mt-0.5">
+                                                            目标: {req.value}{req.type === 'attribute' && req.target === 'gpa' ? '' : '+'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className={`font-mono font-bold ${met ? 'text-green-400' : 'text-dark-400'}`}>
+                                                        {req.type === 'wealth' ? (student.family.wealth === 'wealthy' ? '富裕' : student.family.wealth === 'middle' ? '中产' : '贫困') : current}
+                                                    </p>
+                                                    <p className="text-[10px] text-dark-600 uppercase tracking-tighter">当前值</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="p-6 rounded-2xl bg-accent-500/5 border border-accent-500/10">
+                                <h4 className="text-sm font-bold text-accent-400 mb-2">规划师建议</h4>
+                                <p className="text-xs text-dark-300 leading-relaxed">
+                                    实现「{selectedGoal.name}」需要持续的精力和长期的投入。建议你在本周合理分配行动力，优先补齐
+                                    {selectedGoal.requirements.filter(r => !isRequirementMet(r)).map(r => `【${getRequirementLabel(r)}】`).join('、') || '所有关键指标'}。
                                 </p>
                             </div>
-                        );
-                    })}
-                </div>
-
-                {/* Footer Info */}
-                <div className="mt-10 pt-6 border-t border-dark-800/50 text-center">
-                    <p className="text-dark-500 text-xs italic">
-                        目标进度取决于你的 GPA、IQ、EQ、金钱以及社团活跃度等综合表现。
-                    </p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

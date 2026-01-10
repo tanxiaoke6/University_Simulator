@@ -6,11 +6,16 @@ import GameScreen from './components/GameScreen';
 import EventModal from './components/EventModal';
 import EndingScreen from './components/EndingScreen';
 import SettingsModal from './components/SettingsModal';
-import { useState } from 'react';
+import NotificationOverlay from './components/NotificationOverlay';
+import { useState, useEffect } from 'react';
 
 function App() {
-    const { phase } = useGameStore();
+    const { phase, loadConfigFromFile } = useGameStore();
     const [showSettings, setShowSettings] = useState(false);
+
+    useEffect(() => {
+        loadConfigFromFile();
+    }, [loadConfigFromFile]);
 
     return (
         <div className="min-h-screen bg-dark-950 text-dark-100">
@@ -38,6 +43,8 @@ function App() {
                     onClose={() => setShowSettings(false)}
                 />
             )}
+
+            <NotificationOverlay />
         </div>
     );
 }

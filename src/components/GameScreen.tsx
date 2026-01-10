@@ -1,4 +1,4 @@
-// Main Game Screen Component - Iteration 3
+// Main Game Screen Component - Iteration 4
 import { useGameStore } from '../stores/gameStore';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
@@ -6,21 +6,24 @@ import StoryFeed from './StoryFeed';
 import ActionPanel from './ActionPanel';
 import TutorialOverlay, { useTutorial } from './TutorialOverlay';
 import CampusMap from './CampusMap';
-import { Settings, Loader2, Target, MessageSquare, Map as MapIcon } from 'lucide-react';
+import StudentAffairs from './StudentAffairs';
+import { Settings, Loader2, Target, MessageSquare, Map as MapIcon, GraduationCap, Users, Calendar, ClipboardList } from 'lucide-react';
+import SchoolCalendar from './SchoolCalendar';
 import { useState } from 'react';
 import GoalTrackerModal from './GoalTrackerModal';
+import TaskBoard from './TaskBoard';
 
 interface GameScreenProps {
     onOpenSettings: () => void;
 }
 
-type GameTab = 'feed' | 'campus';
+type GameTab = 'campus' | 'feed' | 'affairs' | 'club' | 'schedule' | 'calendar' | 'task';
 
 export default function GameScreen({ onOpenSettings }: GameScreenProps) {
     const { student, isLoading, error } = useGameStore();
     const { showTutorial, completeTutorial } = useTutorial();
     const [showGoalModal, setShowGoalModal] = useState(false);
-    const [activeTab, setActiveTab] = useState<GameTab>('feed');
+    const [activeTab, setActiveTab] = useState<GameTab>('campus');
 
     if (!student) return null;
 
@@ -38,8 +41,16 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                         <span className="text-accent-400 font-bold tracking-tight">第{student.currentDate.week}周</span>
                     </div>
 
-                    {/* Tab Switcher */}
+                    {/* Tab Switcher - Order: Campus, Feed, Affairs, Club, Schedule */}
                     <nav className="flex bg-dark-900/50 p-1 rounded-xl border border-dark-800">
+                        <button
+                            onClick={() => setActiveTab('campus')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'campus' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <MapIcon className="w-4 h-4" />
+                            校园地图
+                        </button>
                         <button
                             onClick={() => setActiveTab('feed')}
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'feed' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
@@ -49,12 +60,44 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                             动态
                         </button>
                         <button
-                            onClick={() => setActiveTab('campus')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'campus' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                            onClick={() => setActiveTab('affairs')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'affairs' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
                                 }`}
                         >
-                            <MapIcon className="w-4 h-4" />
-                            校园地图
+                            <GraduationCap className="w-4 h-4" />
+                            自我提升
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('club')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'club' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <Users className="w-4 h-4" />
+                            社团
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('schedule')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'schedule' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <Calendar className="w-4 h-4" />
+                            课表
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('calendar')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'calendar' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <Calendar className="w-4 h-4" />
+                            校历
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('task')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'task' ? 'bg-primary-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <ClipboardList className="w-4 h-4" />
+                            任务
                         </button>
                     </nav>
                 </div>
@@ -72,7 +115,7 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                         <Settings className="w-5 h-5 text-dark-400" />
                     </button>
                 </div>
-            </header>
+            </header >
 
             <div className="flex-1 flex overflow-hidden relative">
                 <aside className="w-80 h-full border-r border-dark-800/50 overflow-y-auto scrollbar-hide shrink-0 bg-dark-950">
@@ -87,11 +130,31 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                     )}
 
                     <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-                        {activeTab === 'feed' ? (
-                            <StoryFeed events={student.eventHistory.slice(-50)} />
-                        ) : (
-                            <CampusMap />
+                        {activeTab === 'campus' && <CampusMap />}
+                        {activeTab === 'feed' && <StoryFeed events={student.eventHistory.slice(-50)} />}
+                        {activeTab === 'affairs' && <StudentAffairs />}
+                        {activeTab === 'club' && (
+                            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in">
+                                <Users className="w-16 h-16 text-dark-600" />
+                                <h2 className="text-xl font-bold text-dark-300">社团管理</h2>
+                                <p className="text-dark-500 text-sm">功能开发中，敬请期待...</p>
+                                <div className="text-[10px] text-dark-600 mt-4 px-4 py-2 bg-dark-800/50 rounded-lg border border-dark-700">
+                                    Coming Soon: 加入社团、参与活动、获得社交经验
+                                </div>
+                            </div>
                         )}
+                        {activeTab === 'schedule' && (
+                            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in">
+                                <Calendar className="w-16 h-16 text-dark-600" />
+                                <h2 className="text-xl font-bold text-dark-300">我的课表</h2>
+                                <p className="text-dark-500 text-sm">此功能正在快马加鞭开发中...</p>
+                                <div className="text-[10px] text-dark-600 mt-4 px-4 py-2 bg-dark-800/50 rounded-lg border border-dark-700">
+                                    Coming Soon: 查看本周课程、选课功能、教室查询
+                                </div>
+                            </div>
+                        )}
+                        {activeTab === 'calendar' && <SchoolCalendar student={student} />}
+                        {activeTab === 'task' && <TaskBoard />}
                     </div>
 
                     <div className="p-6 border-t border-dark-800/50 bg-dark-950/80 backdrop-blur-md shrink-0">
@@ -102,7 +165,7 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
 
                 {/* Right Sidebar - Fixed width, no page scroll */}
                 <aside className="w-80 h-full border-l border-dark-800/50 overflow-y-auto scrollbar-hide shrink-0 bg-dark-950">
-                    <RightSidebar student={student} />
+                    <RightSidebar />
                 </aside>
 
                 {/* --- Emergency Recovery & Debug --- */}
@@ -123,7 +186,7 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 

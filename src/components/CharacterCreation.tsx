@@ -60,6 +60,7 @@ export default function CharacterCreation() {
     const [gaokaoScore, setGaokaoScore] = useState(0);
     const [gaokaoMode, setGaokaoMode] = useState<'manual' | 'random'>('random');
     const [manualScore, setManualScore] = useState('550');
+    const [gaokaoYear, setGaokaoYear] = useState(2026);  // Default to current year
     const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null);
     const [selectedMajor, setSelectedMajor] = useState<Major | null>(null);
     const [isRandomizing, setIsRandomizing] = useState(false);
@@ -103,6 +104,9 @@ export default function CharacterCreation() {
         setTimeout(() => setIsRandomizing(false), 500);
     }, []);
 
+    // Generate year options (±5 years from 2026)
+    const yearOptions = Array.from({ length: 11 }, (_, i) => 2021 + i);
+
     const nextStep = () => {
         const steps: Step[] = ['basic', 'family', 'gaokao', 'university', 'major'];
         const currentIndex = steps.indexOf(step);
@@ -125,7 +129,8 @@ export default function CharacterCreation() {
             wealth,
             gaokaoScore,
             selectedUniversity,
-            selectedMajor
+            selectedMajor,
+            gaokaoYear
         );
         startNewGame(student);
     };
@@ -204,7 +209,21 @@ export default function CharacterCreation() {
 
                 {step === 'gaokao' && (
                     <div className="space-y-6">
-                        <div className="text-center mb-8"><GraduationCap className="w-12 h-12 text-primary-400 mx-auto mb-4" /><h2 className="text-2xl font-display font-bold">高考分数</h2></div>
+                        <div className="text-center mb-8"><GraduationCap className="w-12 h-12 text-primary-400 mx-auto mb-4" /><h2 className="text-2xl font-display font-bold">高考信息</h2></div>
+
+                        <div>
+                            <label className="input-label">高考年份</label>
+                            <select
+                                value={gaokaoYear}
+                                onChange={(e) => setGaokaoYear(parseInt(e.target.value))}
+                                className="input-field"
+                            >
+                                {yearOptions.map(year => (
+                                    <option key={year} value={year}>{year}年</option>
+                                ))}
+                            </select>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setGaokaoMode('random')} className={`p-4 rounded-xl border ${gaokaoMode === 'random' ? 'bg-primary-600' : 'bg-dark-800'}`}>随机发挥</button>
                             <button onClick={() => setGaokaoMode('manual')} className={`p-4 rounded-xl border ${gaokaoMode === 'manual' ? 'bg-primary-600' : 'bg-dark-800'}`}>自定义</button>

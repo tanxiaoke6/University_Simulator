@@ -19,6 +19,9 @@ export interface Attributes {
     stress: number;     // 0-100, too high = negative events
     charm: number;      // 0-100, affects romance & job interviews
     luck: number;       // 0-100, affects random events
+    employability: number; // 0-100, job prospects
+    logic?: number;       // Optional major-specific
+    creativity?: number;  // Optional major-specific
 }
 
 export interface AcademicInfo {
@@ -29,6 +32,11 @@ export interface AcademicInfo {
     gpa: number;
     knowledgePoints: number;
     failedExams: number;
+    cet6Score: number;
+    honors: string[]; // Competition names
+    researchPoints: number;
+    kaoyanScore?: number;
+    interviewScore?: number;
 }
 
 // ============ University & Major ============
@@ -72,7 +80,26 @@ export type NPCRole =
     | 'partner'
     | 'friend'
     | 'rival'
-    | 'employer';
+    | 'employer'
+    | 'forum_friend'
+    | 'parent'
+    | 'game_assistant';
+
+export interface MomentComment {
+    id: string;
+    author: string;
+    content: string;
+    timestamp: number;
+}
+
+export interface Moment {
+    id: string;
+    content: string;
+    images?: string[];
+    likes: string[];  // array of friend names who liked
+    comments: MomentComment[];
+    timestamp: GameDate;
+}
 
 export interface NPC {
     id: string;
@@ -84,6 +111,9 @@ export interface NPC {
     avatar?: string;
     metDate: GameDate;
     chatHistory?: ChatMessage[]; // NPC chat history
+    moments?: Moment[];  // WeChat Moments (朋友圈)
+    viewMomentsPermission?: boolean;  // Whether player can view moments
+    parentPride?: number; // Pride score for parent NPCs
 }
 
 export interface ChatMessage {
@@ -112,19 +142,49 @@ export interface Item {
     effect?: Partial<Attributes>;
 }
 
+export interface Transaction {
+    id: string;
+    amount: number;
+    type: 'income' | 'expense';
+    description: string;
+    timestamp: GameDate;
+}
+
+export interface Wallet {
+    balance: number;
+    transactions: Transaction[];
+}
+
+export interface PendingExam {
+    certId: string;
+    name: string;
+    startWeek: number;
+    finishWeek: number;
+    passChance: number;
+}
+
+export interface GameNotification {
+    id: string;
+    message: string;
+    type: 'success' | 'info' | 'error';
+    read: boolean;
+    timestamp: number;
+}
+
 // ============ Game Time ============
 
 export interface GameDate {
     year: number;     // 1-4
     semester: number; // 1-2
     week: number;     // 1-20
+    day: number;      // 1-7 (Mon-Sun)
 }
 
 export type Semester = 1 | 2;
 
 // ============ Goals ============
 
-export type GoalType = 'baoyan' | 'kaoyan' | 'employment' | 'abroad' | 'inheritance';
+export type GoalType = 'baoyan' | 'kaoyan' | 'employment' | 'abroad' | 'inheritance' | 'startup';
 
 export interface LifeGoal {
     id: GoalType;
@@ -165,7 +225,7 @@ export interface ActionEffect {
 }
 
 export interface ActionRequirement {
-    type: 'money' | 'attribute' | 'relationship' | 'item';
+    type: 'money' | 'attribute' | 'relationship' | 'item' | 'cet6' | 'honors' | 'research' | 'wealth';
     target: string;
     value: number;
 }
@@ -251,6 +311,7 @@ export interface StudentState {
 
     // Academic
     academic: AcademicInfo;
+    gaokaoYear: number;  // Year of Gaokao (2021-2031)
 
     // Resources
     money: number;
@@ -272,9 +333,14 @@ export interface StudentState {
 
     // Expanded Modules
     currentClub: string | null; // ID of joined club
-    activeBuffs: string[];      // IDs of active certificates/buffs
+    currentJobId: string | null; // ID of active job
+    wallet: Wallet;             // Digital Bank
+    certificates: string[];      // IDs of active certificates/buffs
+    pendingExams: PendingExam[]; // Exams in progress
+    notifications: GameNotification[]; // System messages
     goals: LifeGoal[];          // Progress towards long-term objectives
     achievements: string[];     // Collected achievements
+    forumCache?: { [weekKey: string]: any[] };  // Weekly forum cache
 
     // LLM Context - Rolling summary for AI
     historySummary: string;

@@ -14,6 +14,7 @@ import type {
     Major,
     FamilyWealth,
     LifeGoal,
+    NPC,
 } from '../types';
 import {
     getAvailableUniversities as getUnis
@@ -60,7 +61,7 @@ const FIXED_EVENTS: StaticEvent[] = [
             { id: 'water', text: '偷偷在休息时间多喝水', effects: [{ type: 'attribute', target: 'stamina', value: -10 }] },
             { id: 'sick', text: '装病去阴凉处休息', effects: [{ type: 'attribute', target: 'eq', value: -2 }, { type: 'attribute', target: 'stress', value: -10 }] },
         ],
-        timestamp: { year: 1, semester: 1, week: 1 },
+        timestamp: { year: 1, semester: 1, week: 1, day: 1 },
     },
     {
         id: 'final_exam_y1_s1',
@@ -73,7 +74,7 @@ const FIXED_EVENTS: StaticEvent[] = [
             { id: 'cheat_sheet', text: '准备绝密小抄', effects: [{ type: 'attribute', target: 'stress', value: 20 }, { type: 'gpa', target: 'gpa', value: 0.4 }] },
             { id: 'resign', text: '听天由命', effects: [{ type: 'attribute', target: 'stress', value: -10 }, { type: 'gpa', target: 'gpa', value: -0.2 }] },
         ],
-        timestamp: { year: 1, semester: 1, week: 18 },
+        timestamp: { year: 1, semester: 1, week: 18, day: 1 },
     },
 ];
 
@@ -91,7 +92,7 @@ const RANDOM_STATIC_EVENTS: StaticEvent[] = [
             { id: 'focus', text: '强撑精神继续听', effects: [{ type: 'attribute', target: 'stamina', value: -10 }, { type: 'gpa', target: 'gpa', value: 0.05 }] },
             { id: 'phone', text: '偷偷刷手机', effects: [{ type: 'attribute', target: 'stress', value: -5 }] },
         ],
-        timestamp: { year: 1, semester: 1, week: 0 }, // Placeholder
+        timestamp: { year: 1, semester: 1, week: 0, day: 0 }, // Placeholder
     },
     {
         id: 'roommate_snore',
@@ -104,7 +105,7 @@ const RANDOM_STATIC_EVENTS: StaticEvent[] = [
             { id: 'wake', text: '叫醒室友让他换个姿势', effects: [{ type: 'relationship', target: 'roommate_1', value: -10 }] },
             { id: 'leave', text: '去图书馆通宵自习', effects: [{ type: 'attribute', target: 'stamina', value: -20 }, { type: 'gpa', target: 'gpa', value: 0.1 }] },
         ],
-        timestamp: { year: 1, semester: 1, week: 0 },
+        timestamp: { year: 1, semester: 1, week: 0, day: 0 },
     },
     {
         id: 'canteen_mystery',
@@ -117,7 +118,7 @@ const RANDOM_STATIC_EVENTS: StaticEvent[] = [
             { id: 'ignore', text: '挑出来继续吃', effects: [{ type: 'attribute', target: 'stress', value: 10 }] },
             { id: 'leave', text: '扔掉，出去点外卖', effects: [{ type: 'money', target: 'money', value: -35 }] },
         ],
-        timestamp: { year: 1, semester: 1, week: 0 },
+        timestamp: { year: 1, semester: 1, week: 0, day: 0 },
     },
 ];
 
@@ -180,21 +181,25 @@ export const INITIAL_GOALS: LifeGoal[] = [
     {
         id: 'baoyan',
         name: '学术保研',
-        description: '通过优异的GPA和学术研究获得推免名额',
+        description: '通过优异的GPA、六级成绩和学术科研成果获得推免名额',
         progress: 0,
         requirements: [
-            { type: 'attribute', target: 'iq', value: 80 },
             { type: 'attribute', target: 'gpa', value: 3.8 },
+            { type: 'cet6', target: 'cet6Score', value: 550 },
+            { type: 'research', target: 'researchPoints', value: 50 },
+            { type: 'honors', target: 'honorsCount', value: 2 },
+            { type: 'attribute', target: 'iq', value: 85 },
         ],
     },
     {
         id: 'kaoyan',
         name: '考研上岸',
-        description: '通过全国统一考试进入理想的研究所',
+        description: '通过全国统一考试与复试竞争，进入理想的研究所',
         progress: 0,
         requirements: [
-            { type: 'attribute', target: 'iq', value: 70 },
-            { type: 'attribute', target: 'knowledge', value: 500 },
+            { type: 'attribute', target: 'knowledge', value: 600 },
+            { type: 'attribute', target: 'iq', value: 75 },
+            { type: 'attribute', target: 'luck', value: 60 }, // Luck factor
         ],
     },
     {
@@ -220,10 +225,24 @@ export const INITIAL_GOALS: LifeGoal[] = [
     {
         id: 'inheritance',
         name: '回家继承',
-        description: '利用家庭资源开始创业或继承家业',
+        description: '继承家业',
         progress: 0,
         requirements: [
-            { type: 'attribute', target: 'money', value: 1000000 },
+            { type: 'wealth', target: 'wealth', value: 3 }, // Wealthy
+            { type: 'attribute', target: 'iq', value: 60 }, // Normal IQ default is much higher usually, but request said 60
+            { type: 'attribute', target: 'eq', value: 80 }, // High EQ
+        ],
+    },
+    {
+        id: 'startup',
+        name: '自主创业',
+        description: '毕业后不走寻常路，利用所学知识和积累的商才开启自己的事业',
+        progress: 0,
+        requirements: [
+            { type: 'attribute', target: 'money', value: 200000 },
+            { type: 'attribute', target: 'iq', value: 80 },
+            { type: 'attribute', target: 'eq', value: 80 },
+            { type: 'attribute', target: 'employability', value: 70 },
         ],
     },
 ];
@@ -241,7 +260,8 @@ export const createInitialStudent = (
     wealth: FamilyWealth,
     gaokaoScore: number,
     university: University,
-    major: Major
+    major: Major,
+    gaokaoYear: number
 ): StudentState => {
     const occupation = getRandomOccupation(wealth);
 
@@ -252,11 +272,14 @@ export const createInitialStudent = (
         stress: 20,
         charm: 40 + Math.floor(Math.random() * 30),
         luck: 40 + Math.floor(Math.random() * 30),
+        employability: 50 + Math.floor(Math.random() * 20),
     };
 
     Object.entries(major.statBonus).forEach(([key, value]) => {
-        if (value) {
-            baseAttrs[key as keyof Attributes] = Math.min(100, Math.max(0, baseAttrs[key as keyof Attributes] + value));
+        if (value && key in baseAttrs) {
+            const attrKey = key as keyof Attributes;
+            const currentValue = baseAttrs[attrKey] || 0;
+            baseAttrs[attrKey] = Math.min(100, Math.max(0, currentValue + value));
         }
     });
 
@@ -271,9 +294,12 @@ export const createInitialStudent = (
         universityTier: university.tier,
         universityName: university.name,
         major,
-        gpa: 3.0,
+        gpa: 0,
         knowledgePoints: 0,
         failedExams: 0,
+        cet6Score: 0,
+        honors: [],
+        researchPoints: 0
     };
 
     const flags: GameFlags = {
@@ -289,17 +315,109 @@ export const createInitialStudent = (
 
     const namePool = gender === 'male' ? MALE_NAMES : FEMALE_NAMES;
     const shuffledNames = [...namePool].sort(() => Math.random() - 0.5);
+    const otherGenderPool = gender === 'male' ? FEMALE_NAMES : MALE_NAMES;
+    const shuffledOtherNames = [...otherGenderPool].sort(() => Math.random() - 0.5);
 
-    const npcs = shuffledNames.slice(0, 3).map((rname, idx) => ({
-        id: `roommate_${idx + 1}`,
-        name: rname,
-        gender,
-        role: 'roommate' as const,
-        relationshipScore: 30 + Math.floor(Math.random() * 20),
-        personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
-        metDate: { year: 1, semester: 1, week: 1 },
+    const npcs: NPC[] = [];
+
+    // 1. Roommates (2-3)
+    const roommatesCount = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < roommatesCount; i++) {
+        npcs.push({
+            id: `roommate_${i + 1}`,
+            name: shuffledNames[i],
+            gender,
+            role: 'roommate',
+            relationshipScore: 30 + Math.floor(Math.random() * 20),
+            personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
+            metDate: { year: 1, semester: 1, week: 1, day: 1 },
+            chatHistory: [],
+        });
+    }
+
+    // 2. Classmates (2-3)
+    const classmatesCount = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < classmatesCount; i++) {
+        const isSameGender = Math.random() > 0.5;
+        npcs.push({
+            id: `classmate_${i + 1}`,
+            name: isSameGender ? shuffledNames[roommatesCount + i] : shuffledOtherNames[i],
+            gender: isSameGender ? gender : (gender === 'male' ? 'female' : 'male'),
+            role: 'classmate',
+            relationshipScore: 10 + Math.floor(Math.random() * 20),
+            personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
+            metDate: { year: 1, semester: 1, week: 1, day: 1 },
+            chatHistory: [],
+        });
+    }
+
+    // 3. One Professor
+    npcs.push({
+        id: 'professor_1',
+        name: Math.random() > 0.5 ? '王教授' : '张老师',
+        gender: Math.random() > 0.5 ? 'male' : 'female',
+        role: 'professor',
+        relationshipScore: 5,
+        personality: '严谨、博学、对学生要求很高',
+        metDate: { year: 1, semester: 1, week: 1, day: 1 },
         chatHistory: [],
-    }));
+    });
+
+    // 4. One Friend/Rival
+    npcs.push({
+        id: 'friend_1',
+        name: shuffledOtherNames[classmatesCount + 1],
+        gender: gender === 'male' ? 'female' : 'male',
+        role: 'friend',
+        relationshipScore: 15,
+        personality: '活泼、爱美、喜欢参加社团活动',
+        metDate: { year: 1, semester: 1, week: 1, day: 1 },
+        chatHistory: [],
+    });
+
+    const initialDate: GameDate = { year: 1, semester: 1, week: 1, day: 1 };
+
+    // Initial NPCs (Mom and Dad)
+    const parents: NPC[] = [
+        {
+            id: 'mom',
+            name: '妈妈',
+            gender: 'female',
+            role: 'parent',
+            relationshipScore: 100, // Not used but kept for type safety
+            parentPride: 50,
+            personality: '关怀体贴，总是担心你在学校吃不饱，经常叮嘱你多锻炼。',
+            metDate: initialDate,
+            chatHistory: [],
+            moments: [],
+            viewMomentsPermission: true
+        },
+        {
+            id: 'dad',
+            name: '爸爸',
+            gender: 'male',
+            role: 'parent',
+            relationshipScore: 100,
+            parentPride: 50,
+            personality: '沉稳内敛，平时话不多，但会在关键时刻给予你人生的指引。',
+            metDate: initialDate,
+            chatHistory: [],
+            moments: [],
+            viewMomentsPermission: true
+        },
+        {
+            id: 'game_assistant',
+            name: '游戏助手',
+            gender: 'female',
+            role: 'game_assistant',
+            relationshipScore: 100,
+            personality: '友好、乐于助人、熟悉一切游戏机制',
+            metDate: initialDate,
+            chatHistory: [],
+            moments: [],
+            viewMomentsPermission: true
+        }
+    ];
 
     return {
         id: `student_${Date.now()}`,
@@ -307,24 +425,36 @@ export const createInitialStudent = (
         gender,
         age,
         family,
-        attributes: baseAttrs,
+        attributes: { ...baseAttrs, employability: 50 },
         academic,
+        gaokaoYear,
         money: STARTING_MONEY[wealth],
         inventory: [],
-        npcs,
+        npcs: [...parents, ...npcs],
         flags,
-        currentDate: { year: 1, semester: 1, week: 1 },
+        currentDate: initialDate,
         eventHistory: [],
-        actionPoints: 3,
-        maxActionPoints: 3,
+        actionPoints: 5,
+        maxActionPoints: 5,
         currentClub: null,
-        activeBuffs: [],
-        goals: [
-            { id: 'kaoyan', name: '考研深造', description: '备战研究生入学考试', progress: 0, requirements: [{ type: 'attribute', target: 'iq', value: 70 }] },
-            { id: 'abroad', name: '出国留学', description: '申请海外名校', progress: 0, requirements: [{ type: 'attribute', target: 'charm', value: 60 }] },
-            { id: 'employment', name: '大厂求职', description: '进入知名企业工作', progress: 0, requirements: [{ type: 'attribute', target: 'eq', value: 65 }] },
-        ],
+        currentJobId: null,
+        wallet: {
+            balance: STARTING_MONEY[wealth],
+            transactions: [
+                {
+                    id: `trans_${Date.now()}`,
+                    amount: STARTING_MONEY[wealth],
+                    type: 'income',
+                    description: '初始资金',
+                    timestamp: initialDate
+                }
+            ]
+        },
+        certificates: [],
+        pendingExams: [],
+        notifications: [],
+        goals: INITIAL_GOALS,
         achievements: [],
-        historySummary: `${name}以${gaokaoScore}分的成绩考入${university.name}${major.name}专业，开始了大学生活。`,
+        historySummary: `${name}以${academic.gaokaoScore}分的成绩考入${university.name}${major.name}专业，开始了大学生活。`,
     };
-}
+};

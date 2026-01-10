@@ -13,6 +13,9 @@ import {
     Sparkles,
     Cpu,
     RefreshCw,
+    Terminal,
+    Unlock,
+    Edit2,
 } from 'lucide-react';
 import { testLLMConnection } from '../services/aiService';
 
@@ -29,6 +32,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [importJson, setImportJson] = useState('');
     const [copyFeedback, setCopyFeedback] = useState(false);
     const [showImportArea, setShowImportArea] = useState(false);
+
+    // Developer Mode State
+    const [showDevAuth, setShowDevAuth] = useState(false);
+    const [devPassword, setDevPassword] = useState('');
+    const [isDevUnlocked, setIsDevUnlocked] = useState(false);
+    const [devError, setDevError] = useState('');
+
+    // Dev Edit State
+    const [editingAttr, setEditingAttr] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
@@ -74,6 +86,56 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         localStorage.removeItem('university-simulator-tutorial-completed');
         alert('教程已重置。下次进入游戏将显示新手引导。');
         onClose();
+    };
+
+    const handleDevAuth = async () => {
+        try {
+            const response = await fetch('/llm_api_config.json');
+            const data = await response.json();
+            if (data.dev_password && devPassword === data.dev_password) {
+                setIsDevUnlocked(true);
+                setDevError('');
+                setShowDevAuth(false);
+            } else {
+                setDevError('密码错误');
+            }
+        } catch (e) {
+            setDevError('无法验证密码');
+        }
+    };
+
+    const handleUpdateAttribute = (attr: string, value: number) => {
+        const student = useGameStore.getState().student;
+        if (!student) return;
+
+        const currentStudent = useGameStore.getState().student;
+        if (!currentStudent) return;
+
+        // Create a deep clone to ensure state update triggers
+        const updatedStudent = {
+            ...currentStudent,
+            attributes: {
+                ...currentStudent.attributes,
+                [attr]: value
+            }
+        };
+
+        useGameStore.getState().updateStudent(updatedStudent);
+        setEditingAttr(null);
+    };
+
+    const handleUpdateMoney = (value: number) => {
+        useGameStore.getState().updateStudent({ money: value });
+        setEditingAttr(null);
+    };
+
+    const handleUpdateWealth = (wealth: 'wealthy' | 'middle' | 'poor') => {
+        useGameStore.getState().updateStudent({
+            family: {
+                ...useGameStore.getState().student!.family,
+                wealth: wealth
+            }
+        });
     };
 
     return (
@@ -234,6 +296,107 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <div className={`w-4 h-4 bg-white rounded-full transition-transform ${config.autoSave ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
+                    </section>
+
+                    {/* Developer Options */}
+                    <section className="space-y-4 pt-6 border-t border-dark-800/50">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Terminal className="w-5 h-5 text-dark-400" />
+                                <h3 className="text-lg font-bold text-dark-300">开发者选项</h3>
+                            </div>
+                            {!isDevUnlocked ? (
+                                <button
+                                    onClick={() => setShowDevAuth(!showDevAuth)}
+                                    className="text-xs text-dark-500 hover:text-primary-400 transition-colors uppercase font-bold tracking-wider"
+                                >
+                                    Enable Dev Mode
+                                </button>
+                            ) : (
+                                <span className="text-xs text-green-500 font-bold flex items-center gap-1">
+                                    <Unlock className="w-3 h-3" />
+                                    已解锁
+                                </span>
+                            )}
+                        </div>
+
+                        {showDevAuth && !isDevUnlocked && (
+                            <div className="flex gap-2 animate-fade-in">
+                                <input
+                                    type="password"
+                                    value={devPassword}
+                                    onChange={(e) => setDevPassword(e.target.value)}
+                                    placeholder="输入开发者密码..."
+                                    className="input-field py-1"
+                                />
+                                <button onClick={handleDevAuth} className="action-btn-primary whitespace-nowrap">
+                                    验证
+                                </button>
+                            </div>
+                        )}
+                        {devError && <p className="text-xs text-red-500">{devError}</p>}
+
+                        {isDevUnlocked && (
+                            <div className="space-y-4 animate-scale-in bg-dark-900/50 p-4 rounded-xl border border-primary-500/20">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Money */}
+                                    <div className="p-3 bg-dark-800 rounded-lg flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[10px] text-dark-500 uppercase">金钱</p>
+                                            {editingAttr === 'money' ? (
+                                                <input
+                                                    autoFocus
+                                                    type="number"
+                                                    className="w-20 bg-dark-900 text-white text-xs p-1 rounded border border-primary-500"
+                                                    defaultValue={useGameStore.getState().student?.money}
+                                                    onBlur={(e) => handleUpdateMoney(parseInt(e.target.value))}
+                                                    onKeyDown={(e: any) => e.key === 'Enter' && handleUpdateMoney(parseInt(e.currentTarget.value))}
+                                                />
+                                            ) : (
+                                                <p className="font-mono font-bold text-green-400">¥{useGameStore.getState().student?.money}</p>
+                                            )}
+                                        </div>
+                                        <button onClick={() => setEditingAttr('money')}><Edit2 className="w-4 h-4 text-dark-500 hover:text-primary-400" /></button>
+                                    </div>
+
+                                    {/* Wealth */}
+                                    <div className="p-3 bg-dark-800 rounded-lg">
+                                        <p className="text-[10px] text-dark-500 uppercase mb-1">家庭背景</p>
+                                        <select
+                                            className="w-full bg-dark-900 text-xs text-white p-1 rounded border border-dark-700 focus:border-primary-500 outline-none"
+                                            value={useGameStore.getState().student?.family.wealth}
+                                            onChange={(e) => handleUpdateWealth(e.target.value as any)}
+                                        >
+                                            <option value="wealthy">富裕 (Wealthy)</option>
+                                            <option value="middle">中产 (Middle)</option>
+                                            <option value="poor">贫困 (Poor)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Attributes */}
+                                    {['iq', 'eq', 'stamina', 'memory', 'imagination', 'employability'].map((attr) => (
+                                        <div key={attr} className="p-3 bg-dark-800 rounded-lg flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] text-dark-500 uppercase">{attr}</p>
+                                                {editingAttr === attr ? (
+                                                    <input
+                                                        autoFocus
+                                                        type="number"
+                                                        className="w-20 bg-dark-900 text-white text-xs p-1 rounded border border-primary-500"
+                                                        defaultValue={((useGameStore.getState().student?.attributes as any) || {})[attr] || 0}
+                                                        onBlur={(e) => handleUpdateAttribute(attr, parseInt(e.target.value))}
+                                                        onKeyDown={(e: any) => e.key === 'Enter' && handleUpdateAttribute(attr, parseInt(e.currentTarget.value))}
+                                                    />
+                                                ) : (
+                                                    <p className="font-mono font-bold text-blue-400">{((useGameStore.getState().student?.attributes as any) || {})[attr] || 0}</p>
+                                                )}
+                                            </div>
+                                            <button onClick={() => setEditingAttr(attr)}><Edit2 className="w-4 h-4 text-dark-500 hover:text-primary-400" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </section>
                 </div>
 

@@ -10,6 +10,8 @@ import {
     Wallet,
     GraduationCap,
     Star,
+    Briefcase,
+    Coins,
 } from 'lucide-react';
 
 interface LeftSidebarProps {
@@ -17,7 +19,7 @@ interface LeftSidebarProps {
 }
 
 export default function LeftSidebar({ student }: LeftSidebarProps) {
-    const { attributes, academic, money, name, gender } = student;
+    const { attributes, academic, wallet, name } = student;
 
     return (
         <aside className="sidebar animate-slide-in-left">
@@ -38,8 +40,8 @@ export default function LeftSidebar({ student }: LeftSidebarProps) {
                         <Wallet className="w-5 h-5 text-accent-400" />
                         <span className="text-dark-300">余额</span>
                     </div>
-                    <span className={`font-bold ${money < 500 ? 'text-red-400' : 'text-accent-400'}`}>
-                        ¥{money.toLocaleString()}
+                    <span className={`font-bold ${wallet.balance < 500 ? 'text-red-400' : 'text-accent-400'}`}>
+                        ¥{wallet.balance.toLocaleString()}
                     </span>
                 </div>
             </div>
@@ -63,32 +65,40 @@ export default function LeftSidebar({ student }: LeftSidebarProps) {
 
             {/* Attributes */}
             <div className="glass-card-light p-4 space-y-4">
-                <h3 className="text-dark-300 text-sm font-medium mb-3">属性</h3>
+                <h3 className="text-dark-300 text-sm font-medium mb-3">属性面板</h3>
+
+                <StatBar
+                    icon={<Coins className="w-4 h-4" />}
+                    label="金钱 (Money)"
+                    value={wallet.balance}
+                    color="from-yellow-500 to-amber-400"
+                    max={10000} // Soft cap for visualization
+                />
 
                 <StatBar
                     icon={<Brain className="w-4 h-4" />}
-                    label="智力"
+                    label="智力 (IQ)"
                     value={attributes.iq}
                     color="from-blue-500 to-blue-400"
                 />
 
                 <StatBar
                     icon={<Heart className="w-4 h-4" />}
-                    label="情商"
+                    label="情商 (EQ)"
                     value={attributes.eq}
                     color="from-pink-500 to-pink-400"
                 />
 
                 <StatBar
                     icon={<Zap className="w-4 h-4" />}
-                    label="体力"
+                    label="体力 (Stamina)"
                     value={attributes.stamina}
                     color="from-green-500 to-green-400"
                 />
 
                 <StatBar
                     icon={<AlertTriangle className="w-4 h-4" />}
-                    label="压力"
+                    label="压力 (Stress)"
                     value={attributes.stress}
                     color="from-red-500 to-red-400"
                     invert
@@ -96,17 +106,42 @@ export default function LeftSidebar({ student }: LeftSidebarProps) {
 
                 <StatBar
                     icon={<Sparkles className="w-4 h-4" />}
-                    label="魅力"
+                    label="魅力 (Charm)"
                     value={attributes.charm}
                     color="from-purple-500 to-purple-400"
                 />
 
                 <StatBar
                     icon={<Star className="w-4 h-4" />}
-                    label="运气"
+                    label="运气 (Luck)"
                     value={attributes.luck}
                     color="from-accent-500 to-accent-400"
                 />
+
+                <StatBar
+                    icon={<Briefcase className="w-4 h-4" />}
+                    label="就业力 (Employability)"
+                    value={attributes.employability}
+                    color="from-blue-600 to-cyan-500"
+                />
+
+                {/* Major Specific Attributes if any */}
+                {attributes.logic !== undefined && (
+                    <StatBar
+                        icon={<Brain className="w-4 h-4" />}
+                        label="逻辑 (Logic)"
+                        value={attributes.logic}
+                        color="from-indigo-500 to-indigo-400"
+                    />
+                )}
+                {attributes.creativity !== undefined && (
+                    <StatBar
+                        icon={<Sparkles className="w-4 h-4" />}
+                        label="创造力 (Creativity)"
+                        value={attributes.creativity}
+                        color="from-fuchsia-500 to-fuchsia-400"
+                    />
+                )}
             </div>
 
             {/* Status Tags */}
@@ -143,25 +178,28 @@ interface StatBarProps {
     value: number;
     color: string;
     invert?: boolean;
+    max?: number; // Optional custom max value (default 100)
 }
 
-function StatBar({ icon, label, value, color, invert }: StatBarProps) {
-    const displayValue = Math.min(100, Math.max(0, value));
-    const isWarning = invert ? value > 70 : value < 30;
+function StatBar({ icon, label, value, color, invert = false, max = 100 }: StatBarProps) {
+    // Calculate percentage based on max
+    const percentage = Math.min(100, Math.max(0, (value / max) * 100));
 
     return (
         <div>
-            <div className="flex items-center justify-between text-sm mb-1">
-                <div className={`flex items-center gap-2 ${isWarning ? 'text-red-400' : 'text-dark-400'}`}>
+            <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 text-dark-300">
                     {icon}
-                    <span>{label}</span>
+                    <span className="text-xs">{label}</span>
                 </div>
-                <span className={isWarning ? 'text-red-400' : 'text-dark-300'}>{displayValue}</span>
+                <span className={`text-xs font-bold ${invert ? (value > 80 ? 'text-red-400' : 'text-green-400') : 'text-primary-400'}`}>
+                    {value.toLocaleString()}
+                </span>
             </div>
             <div className="stat-bar">
                 <div
                     className={`stat-bar-fill bg-gradient-to-r ${color}`}
-                    style={{ width: `${displayValue}%` }}
+                    style={{ width: `${percentage}%` }}
                 />
             </div>
         </div>
