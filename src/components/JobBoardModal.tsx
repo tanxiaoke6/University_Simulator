@@ -5,7 +5,6 @@ import {
     Briefcase,
     TrendingUp,
     Clock,
-    CheckCircle,
     Lock,
     Brain,
     CircleSlash
@@ -17,18 +16,18 @@ interface JobBoardModalProps {
 }
 
 export default function JobBoardModal({ onClose }: JobBoardModalProps) {
-    const { student, applyEffects, setPhase } = useGameStore();
+    const { student, applyEffects, addNotification } = useGameStore();
 
     if (!student) return null;
 
     const handleWork = (job: Job) => {
         // Simple validation: Can only work if you have AP (managed by store)
         if (student.actionPoints <= 0) {
-            alert('已经没有体力继续打工了，先去休息吧。');
+            addNotification('已经没有体力继续打工了，先去休息吧。', 'error');
             return;
         }
 
-        // Apply effects (Money gain and Stamina loss)
+        // Apply effects (Money gain and Stamina loss) - this already creates an aggregated notification
         applyEffects([
             { type: 'money', target: 'money', value: job.salary },
             { type: 'attribute', target: 'stamina', value: -job.energyCost }
@@ -38,8 +37,6 @@ export default function JobBoardModal({ onClose }: JobBoardModalProps) {
         useGameStore.getState().updateStudent({
             actionPoints: student.actionPoints - 1
         });
-
-        alert(`完成了 [${job.title}]，获得了 ¥${job.salary}！`);
     };
 
     const isRequirementsMet = (job: Job) => {
@@ -53,8 +50,8 @@ export default function JobBoardModal({ onClose }: JobBoardModalProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-dark-950/60 animate-fade-in">
-            <div className="max-w-3xl w-full glass-card max-h-[85vh] flex flex-col overflow-hidden border-green-500/30">
+        <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 sm:p-6 backdrop-blur-md bg-dark-950/60 animate-fade-in overflow-y-auto">
+            <div className="max-w-3xl w-full glass-card h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden border-green-500/30 my-auto animate-scale-in">
                 {/* Header */}
                 <div className="p-6 border-b border-dark-800 flex items-center justify-between bg-dark-900/50">
                     <div className="flex items-center gap-3">

@@ -25,7 +25,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-    const { config, setConfig, resetGame, exportSave, importSave } = useGameStore();
+    const { student, config, setConfig, resetGame, exportSave, importSave, updateStudent } = useGameStore();
 
     const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [testMessage, setTestMessage] = useState('');
@@ -103,39 +103,48 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             setDevError('无法验证密码');
         }
     };
-
     const handleUpdateAttribute = (attr: string, value: number) => {
-        const student = useGameStore.getState().student;
         if (!student) return;
 
-        const currentStudent = useGameStore.getState().student;
-        if (!currentStudent) return;
-
-        // Create a deep clone to ensure state update triggers
-        const updatedStudent = {
-            ...currentStudent,
-            attributes: {
-                ...currentStudent.attributes,
-                [attr]: value
-            }
+        // Create updated attributes object
+        const updatedAttributes = {
+            ...student.attributes,
+            [attr]: value
         };
 
-        useGameStore.getState().updateStudent(updatedStudent);
+        updateStudent({ attributes: updatedAttributes });
         setEditingAttr(null);
     };
 
     const handleUpdateMoney = (value: number) => {
-        useGameStore.getState().updateStudent({ money: value });
+        if (!student) return;
+        updateStudent({
+            money: value,
+            wallet: { ...student.wallet, balance: value }
+        });
         setEditingAttr(null);
     };
 
     const handleUpdateWealth = (wealth: 'wealthy' | 'middle' | 'poor') => {
-        useGameStore.getState().updateStudent({
+        if (!student) return;
+        updateStudent({
             family: {
-                ...useGameStore.getState().student!.family,
+                ...student.family,
                 wealth: wealth
             }
         });
+    };
+
+    const handleUpdateGPA = (value: number) => {
+        if (!student) return;
+        const clampedValue = Math.max(0, Math.min(4, value)); // GPA 0-4 range
+        updateStudent({
+            academic: {
+                ...student.academic,
+                gpa: clampedValue
+            }
+        });
+        setEditingAttr(null);
     };
 
     return (
@@ -348,12 +357,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                     autoFocus
                                                     type="number"
                                                     className="w-20 bg-dark-900 text-white text-xs p-1 rounded border border-primary-500"
-                                                    defaultValue={useGameStore.getState().student?.money}
+                                                    defaultValue={student?.money}
                                                     onBlur={(e) => handleUpdateMoney(parseInt(e.target.value))}
                                                     onKeyDown={(e: any) => e.key === 'Enter' && handleUpdateMoney(parseInt(e.currentTarget.value))}
                                                 />
                                             ) : (
-                                                <p className="font-mono font-bold text-green-400">¥{useGameStore.getState().student?.money}</p>
+                                                <p className="font-mono font-bold text-green-400">¥{student?.money}</p>
                                             )}
                                         </div>
                                         <button onClick={() => setEditingAttr('money')}><Edit2 className="w-4 h-4 text-dark-500 hover:text-primary-400" /></button>
@@ -364,7 +373,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                         <p className="text-[10px] text-dark-500 uppercase mb-1">家庭背景</p>
                                         <select
                                             className="w-full bg-dark-900 text-xs text-white p-1 rounded border border-dark-700 focus:border-primary-500 outline-none"
-                                            value={useGameStore.getState().student?.family.wealth}
+                                            value={student?.family.wealth}
                                             onChange={(e) => handleUpdateWealth(e.target.value as any)}
                                         >
                                             <option value="wealthy">富裕 (Wealthy)</option>
@@ -373,8 +382,31 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                         </select>
                                     </div>
 
+                                    {/* GPA */}
+                                    <div className="p-3 bg-dark-800 rounded-lg flex items-center justify-between">
+                                        <div>
+                                            <p className="text-[10px] text-dark-500 uppercase">GPA</p>
+                                            {editingAttr === 'gpa' ? (
+                                                <input
+                                                    autoFocus
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    max="4"
+                                                    className="w-20 bg-dark-900 text-white text-xs p-1 rounded border border-primary-500"
+                                                    defaultValue={student?.academic.gpa.toFixed(2)}
+                                                    onBlur={(e) => handleUpdateGPA(parseFloat(e.target.value))}
+                                                    onKeyDown={(e: any) => e.key === 'Enter' && handleUpdateGPA(parseFloat(e.currentTarget.value))}
+                                                />
+                                            ) : (
+                                                <p className="font-mono font-bold text-yellow-400">{student?.academic.gpa.toFixed(2)}</p>
+                                            )}
+                                        </div>
+                                        <button onClick={() => setEditingAttr('gpa')}><Edit2 className="w-4 h-4 text-dark-500 hover:text-primary-400" /></button>
+                                    </div>
+
                                     {/* Attributes */}
-                                    {['iq', 'eq', 'stamina', 'memory', 'imagination', 'employability'].map((attr) => (
+                                    {['iq', 'eq', 'stamina', 'stress', 'charm', 'luck', 'employability'].map((attr) => (
                                         <div key={attr} className="p-3 bg-dark-800 rounded-lg flex items-center justify-between">
                                             <div>
                                                 <p className="text-[10px] text-dark-500 uppercase">{attr}</p>
@@ -383,12 +415,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                         autoFocus
                                                         type="number"
                                                         className="w-20 bg-dark-900 text-white text-xs p-1 rounded border border-primary-500"
-                                                        defaultValue={((useGameStore.getState().student?.attributes as any) || {})[attr] || 0}
+                                                        defaultValue={((student?.attributes as any) || {})[attr] || 0}
                                                         onBlur={(e) => handleUpdateAttribute(attr, parseInt(e.target.value))}
                                                         onKeyDown={(e: any) => e.key === 'Enter' && handleUpdateAttribute(attr, parseInt(e.currentTarget.value))}
                                                     />
                                                 ) : (
-                                                    <p className="font-mono font-bold text-blue-400">{((useGameStore.getState().student?.attributes as any) || {})[attr] || 0}</p>
+                                                    <p className="font-mono font-bold text-blue-400">{((student?.attributes as any) || {})[attr] || 0}</p>
                                                 )}
                                             </div>
                                             <button onClick={() => setEditingAttr(attr)}><Edit2 className="w-4 h-4 text-dark-500 hover:text-primary-400" /></button>

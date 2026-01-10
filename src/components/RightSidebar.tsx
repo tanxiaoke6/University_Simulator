@@ -1,7 +1,7 @@
 // Right Sidebar - Personal Belongings (Phone & Bag)
 import { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
-import { generateForumPosts, ForumPost } from '../services/aiService';
+import { generateForumPosts, ForumPost, generateNPCProfile, NPCProfile } from '../services/aiService';
 import {
     Heart,
     ChevronLeft,
@@ -24,14 +24,16 @@ import {
     Trash2,
     Eye,
     EyeOff,
-    Trophy
+    Trophy,
+    Scroll,
+    Users2
 } from 'lucide-react';
 import type { NPC } from '../types';
 
 export default function RightSidebar() {
     const { student, useItem, sendChatMessage, config, addFriendFromForum, toggleMomentsPermission, deleteFriend, likeMoment, commentOnMoment } = useGameStore();
     const [activeTab, setActiveTab] = useState<'apps' | 'items'>('apps');
-    const [openApp, setOpenApp] = useState<'none' | 'wechat' | 'forum' | 'bank' | 'moments' | 'tiktok'>('none');
+    const [openApp, setOpenApp] = useState<'none' | 'wechat' | 'forum' | 'bank' | 'moments' | 'tiktok' | 'quests' | 'relationships'>('none');
     const [selectedNPC, setSelectedNPC] = useState<NPC | null>(null);
     const [chatInput, setChatInput] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -45,6 +47,11 @@ export default function RightSidebar() {
     const [expandedPost, setExpandedPost] = useState<string | null>(null);
     const [commentInput, setCommentInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    // NPC Profile Detail State
+    const [profileNPC, setProfileNPC] = useState<NPC | null>(null);
+    const [npcProfile, setNpcProfile] = useState<NPCProfile | null>(null);
+    const [profileLoading, setProfileLoading] = useState(false);
 
     // Scroll to bottom when chat updates
     useEffect(() => {
@@ -114,6 +121,8 @@ export default function RightSidebar() {
         if (openApp === 'bank') return renderBank();
         if (openApp === 'moments') return renderMoments();
         if (openApp === 'tiktok') return renderTikTok();
+        if (openApp === 'quests') return renderQuestLog();
+        if (openApp === 'relationships') return renderRelationships();
 
         return (
             <div className="grid grid-cols-3 gap-4 p-4 animate-fade-in">
@@ -156,6 +165,258 @@ export default function RightSidebar() {
                     </div>
                     <span className="text-[10px] font-bold text-dark-300">银行</span>
                 </button>
+
+                <button
+                    onClick={() => setOpenApp('relationships')}
+                    className="flex flex-col items-center gap-2 group"
+                >
+                    <div className="w-12 h-12 rounded-2xl bg-pink-500 flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                        <Users2 className="w-6 h-6" />
+                    </div>
+                    <span className="text-[10px] font-bold text-dark-300">人物关系</span>
+                </button>
+            </div>
+        );
+    };
+
+    const getStatusColor = (status: string) => {
+        if (status === 'Completed') return 'text-green-400';
+        if (status === 'Failed') return 'text-red-400';
+        return 'text-amber-400';
+    };
+
+    const getTypeIcon = (type: string) => {
+        if (type === 'Romance') return '💕';
+        if (type === 'Academic') return '📚';
+        return '🏆';
+    };
+
+    const renderQuestLog = () => (
+        <div className="flex flex-col h-full animate-fade-in bg-dark-900/30 rounded-xl overflow-hidden min-h-[400px]">
+            <header className="p-3 border-b border-dark-700/50 flex items-center gap-3 bg-purple-900/20">
+                <button onClick={() => setOpenApp('none')}>
+                    <ChevronLeft className="w-4 h-4 text-dark-400" />
+                </button>
+                <h3 className="font-bold text-xs text-purple-300">任务日志</h3>
+            </header>
+            <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+                {student.quests.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-dark-600 gap-2">
+                        <Scroll className="w-12 h-12 opacity-20" />
+                        <p className="text-sm">暂无活跃任务</p>
+                        <p className="text-[10px] text-dark-500 text-center max-w-[200px]">
+                            随着游戏进行，任务会自动触发。继续探索校园吧！
+                        </p>
+                    </div>
+                ) : (
+                    student.quests.map(quest => (
+                        <div key={quest.id} className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/50 hover:border-purple-500/30 transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">{getTypeIcon(quest.type)}</span>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-white">{quest.title}</h4>
+                                        <span className={`text-[9px] font-bold ${getStatusColor(quest.status)}`}>
+                                            {quest.status === 'Completed' ? '已完成' : quest.status === 'Failed' ? '失败' : '进行中'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] text-dark-500">{quest.progress}%</span>
+                            </div>
+
+                            <p className="text-[10px] text-dark-400 leading-relaxed mb-3">{quest.description}</p>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden mb-3">
+                                <div
+                                    className={`h-full rounded-full transition-all ${quest.status === 'Completed' ? 'bg-green-500' : quest.status === 'Failed' ? 'bg-red-500' : 'bg-purple-500'}`}
+                                    style={{ width: `${quest.progress}%` }}
+                                />
+                            </div>
+
+                            {/* Stages */}
+                            {quest.stages && quest.stages.length > 0 && (
+                                <div className="space-y-1.5 border-t border-dark-700/50 pt-2 mt-2">
+                                    {quest.stages.map((stage, i) => (
+                                        <div key={stage.id} className={`flex items-center gap-2 text-[9px] ${stage.isComplete ? 'text-green-400' : i === quest.currentStage ? 'text-purple-300' : 'text-dark-500'}`}>
+                                            <span className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${stage.isComplete ? 'bg-green-500/20 border-green-500' : i === quest.currentStage ? 'border-purple-500 bg-purple-500/10' : 'border-dark-600'}`}>
+                                                {stage.isComplete ? '✓' : (i + 1)}
+                                            </span>
+                                            <span>{stage.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Rewards Preview */}
+                            <div className="flex items-center gap-2 mt-3 pt-2 border-t border-dark-700/30">
+                                <span className="text-[9px] text-dark-500 uppercase font-bold">奖励:</span>
+                                {quest.rewards.money && <span className="text-[9px] text-amber-400">¥{quest.rewards.money}</span>}
+                                {quest.rewards.honor && <span className="text-[9px] text-blue-400">{quest.rewards.honor}</span>}
+                                {quest.rewards.attributes && <span className="text-[9px] text-green-400">属性提升</span>}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+
+    const getRelationshipLevel = (score: number) => {
+        if (score >= 80) return { label: '挚友', color: 'text-pink-400', bg: 'bg-pink-500/20' };
+        if (score >= 50) return { label: '好友', color: 'text-green-400', bg: 'bg-green-500/20' };
+        if (score >= 20) return { label: '熟人', color: 'text-blue-400', bg: 'bg-blue-500/20' };
+        if (score >= 0) return { label: '认识', color: 'text-dark-400', bg: 'bg-dark-500/20' };
+        return { label: '敌对', color: 'text-red-400', bg: 'bg-red-500/20' };
+    };
+
+    const renderRelationships = () => {
+        // Filter out system NPCs like game_assistant and parents for the profile view
+        const profileNPCs = student.npcs.filter(npc =>
+            npc.id !== 'game_assistant' && npc.role !== 'parent'
+        );
+
+        return (
+            <div className="flex flex-col h-full animate-fade-in bg-dark-900/30 rounded-xl overflow-hidden min-h-[400px]">
+                <header className="p-3 border-b border-dark-700/50 flex items-center gap-3 bg-pink-900/20">
+                    <button onClick={() => setOpenApp('none')}>
+                        <ChevronLeft className="w-4 h-4 text-dark-400" />
+                    </button>
+                    <h3 className="font-bold text-xs text-pink-300">人物关系</h3>
+                    <span className="ml-auto text-[9px] text-dark-500">{profileNPCs.length} 位好友</span>
+                </header>
+                <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+                    {profileNPCs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-dark-600 gap-2">
+                            <Users2 className="w-12 h-12 opacity-20" />
+                            <p className="text-sm">暂无好友资料</p>
+                        </div>
+                    ) : (
+                        profileNPCs.map(npc => {
+                            const level = getRelationshipLevel(npc.relationshipScore);
+                            return (
+                                <button
+                                    key={npc.id}
+                                    onClick={async () => {
+                                        setProfileNPC(npc);
+                                        setProfileLoading(true);
+                                        try {
+                                            const profile = await generateNPCProfile(config.llm, { name: npc.name, personality: npc.personality, role: npc.role, gender: npc.gender }, student);
+                                            setNpcProfile(profile);
+                                        } finally {
+                                            setProfileLoading(false);
+                                        }
+                                    }}
+                                    className="w-full text-left p-4 bg-dark-800/40 rounded-xl border border-dark-700/50 hover:border-pink-500/30 transition-colors">
+
+                                    {/* Header with Avatar and Name */}
+                                    <div className="flex items-start gap-4 mb-3">
+                                        {/* Character Portrait Placeholder */}
+                                        <div className="w-16 h-20 rounded-lg bg-gradient-to-br from-dark-700 to-dark-800 border border-dark-600 flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+                                            {npc.gender === 'female' ? '👩🏻' : '👨🏻'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h4 className="text-sm font-bold text-white">{npc.name}</h4>
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${level.bg} ${level.color}`}>
+                                                    {level.label}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-dark-500 mb-2">{getRoleLabel(npc.role, npc.id)}</p>
+                                            <p className="text-[10px] text-dark-400 italic leading-relaxed">"{npc.personality}"</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Stats */}
+                                    <div className="flex items-center justify-between pt-3 border-t border-dark-700/30">
+                                        <div className="flex items-center gap-1">
+                                            <Heart className={`w-3.5 h-3.5 ${npc.relationshipScore >= 50 ? 'fill-pink-500 text-pink-500' : 'text-dark-500'}`} />
+                                            <span className="text-[11px] font-bold text-dark-300">好感度</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-24 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full transition-all ${npc.relationshipScore >= 80 ? 'bg-pink-500' : npc.relationshipScore >= 50 ? 'bg-green-500' : npc.relationshipScore >= 20 ? 'bg-blue-500' : 'bg-dark-500'}`}
+                                                    style={{ width: `${Math.max(0, Math.min(100, npc.relationshipScore))}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-dark-400">{npc.relationshipScore}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-2 text-[9px] text-dark-600">
+                                        相识于第{npc.metDate.year}年 第{npc.metDate.week}周
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* NPC Profile Detail Modal */}
+                {profileNPC && (
+                    <div className="absolute inset-0 bg-dark-950/95 z-50 flex flex-col animate-fade-in">
+                        <header className="p-3 border-b border-dark-700/50 flex items-center gap-3 bg-pink-900/20 shrink-0">
+                            <button onClick={() => { setProfileNPC(null); setNpcProfile(null); }}>
+                                <ChevronLeft className="w-4 h-4 text-dark-400" />
+                            </button>
+                            <h3 className="font-bold text-xs text-pink-300">{profileNPC.name} 的资料</h3>
+                        </header>
+                        <div className="flex-1 p-4 overflow-y-auto">
+                            {profileLoading ? (
+                                <div className="flex flex-col items-center justify-center py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin text-pink-500 mb-3" />
+                                    <p className="text-xs text-dark-500">正在生成详细资料...</p>
+                                </div>
+                            ) : npcProfile ? (
+                                <div className="space-y-4">
+                                    {/* Portrait & Basic Info */}
+                                    <div className="flex items-center gap-4 p-4 bg-dark-800/50 rounded-xl">
+                                        <div className="w-20 h-24 rounded-lg bg-gradient-to-br from-dark-700 to-dark-800 border border-dark-600 flex items-center justify-center text-4xl shrink-0">
+                                            {profileNPC.gender === 'female' ? '👩🏻' : '👨🏻'}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-lg font-bold text-white mb-1">{profileNPC.name}</h4>
+                                            <p className="text-[10px] text-dark-500">{getRoleLabel(profileNPC.role, profileNPC.id)}</p>
+                                            <div className="flex items-center gap-1 mt-2">
+                                                <Heart className={`w-4 h-4 ${profileNPC.relationshipScore >= 50 ? 'fill-pink-500 text-pink-500' : 'text-dark-500'}`} />
+                                                <span className="text-sm font-bold text-pink-400">{profileNPC.relationshipScore}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Profile Sections */}
+                                    <div className="space-y-3">
+                                        <div className="p-3 bg-dark-800/30 rounded-lg border border-dark-700/30">
+                                            <p className="text-[9px] text-dark-500 uppercase font-bold mb-1">背景故事</p>
+                                            <p className="text-[11px] text-dark-300 leading-relaxed">{npcProfile.backstory}</p>
+                                        </div>
+                                        <div className="p-3 bg-dark-800/30 rounded-lg border border-dark-700/30">
+                                            <p className="text-[9px] text-dark-500 uppercase font-bold mb-1">兴趣爱好</p>
+                                            <p className="text-[11px] text-dark-300 leading-relaxed">{npcProfile.hobby}</p>
+                                        </div>
+                                        <div className="p-3 bg-dark-800/30 rounded-lg border border-dark-700/30">
+                                            <p className="text-[9px] text-dark-500 uppercase font-bold mb-1">人生梦想</p>
+                                            <p className="text-[11px] text-dark-300 leading-relaxed">{npcProfile.dream}</p>
+                                        </div>
+                                        <div className="p-3 bg-pink-900/20 rounded-lg border border-pink-700/20">
+                                            <p className="text-[9px] text-pink-400 uppercase font-bold mb-1">🔒 隐藏特质</p>
+                                            <p className="text-[11px] text-dark-300 leading-relaxed">{npcProfile.secretTrait}</p>
+                                        </div>
+                                        <div className="p-3 bg-blue-900/20 rounded-lg border border-blue-700/20">
+                                            <p className="text-[9px] text-blue-400 uppercase font-bold mb-1">💡 攻略建议</p>
+                                            <p className="text-[11px] text-dark-300 leading-relaxed">{npcProfile.relationshipAdvice}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-12 text-dark-500">
+                                    <p className="text-sm">无法加载资料</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };

@@ -120,19 +120,38 @@ export default function CharacterCreation() {
         else setPhase('main_menu');
     };
 
-    const handleStart = () => {
-        if (!selectedUniversity || !selectedMajor) return;
-        const student = createInitialStudent(
-            name || '无名氏',
-            gender,
-            age,
-            wealth,
-            gaokaoScore,
-            selectedUniversity,
-            selectedMajor,
-            gaokaoYear
-        );
-        startNewGame(student);
+    const [isStarting, setIsStarting] = useState(false);
+
+    const handleStart = async () => {
+        if (!selectedUniversity || !selectedMajor) {
+            console.warn("Cannot start: University or Major not selected.");
+            return;
+        }
+
+        setIsStarting(true);
+        try {
+            console.log("Creating initial student with:", { name, gender, age, wealth, gaokaoScore });
+            const config = useGameStore.getState().config;
+            const student = await createInitialStudent(
+                name || '无名氏',
+                gender,
+                age,
+                wealth,
+                gaokaoScore,
+                selectedUniversity,
+                selectedMajor,
+                gaokaoYear,
+                config
+            );
+
+            console.log("Starting new game with student:", student);
+            startNewGame(student);
+        } catch (error) {
+            console.error("Failed to start game:", error);
+            // Optionally set an error state to show to user
+        } finally {
+            setIsStarting(false);
+        }
     };
 
     const universities = gaokaoScore > 0 ? getAvailableUniversities(gaokaoScore) : [];
@@ -156,7 +175,10 @@ export default function CharacterCreation() {
                             <span className="font-medium text-accent-400">{name}</span> | {gender === 'male' ? '男' : '女'} | {age}岁 | {gaokaoScore}分
                             <p className="text-dark-500 mt-1">{selectedUniversity?.name} • {selectedMajor?.name}</p>
                         </div>
-                        <button onClick={handleStart} className="action-btn-primary py-2">立即开始</button>
+                        <button onClick={handleStart} disabled={isStarting} className="action-btn-primary py-2 flex items-center gap-2">
+                            {isStarting ? <Sparkles className="w-4 h-4 animate-spin" /> : null}
+                            {isStarting ? '正在初始化...' : '立即开始'}
+                        </button>
                     </div>
                 )}
 
@@ -262,7 +284,14 @@ export default function CharacterCreation() {
 
                 <div className="flex justify-between mt-8 pt-6 border-t border-dark-700">
                     <button onClick={prevStep} className="action-btn-secondary"><ChevronLeft className="w-5 h-5" />返回</button>
-                    {step === 'major' ? <button onClick={handleStart} disabled={!selectedMajor} className="action-btn-primary disabled:opacity-50">开始生活</button> : <button onClick={nextStep} className="action-btn-primary">下一步</button>}
+                    {step === 'major' ? (
+                        <button onClick={handleStart} disabled={!selectedMajor || isStarting} className="action-btn-primary disabled:opacity-50 flex items-center gap-2">
+                            {isStarting ? <Sparkles className="w-4 h-4 animate-spin" /> : null}
+                            {isStarting ? '正在初始化...' : '开始生活'}
+                        </button>
+                    ) : (
+                        <button onClick={nextStep} className="action-btn-primary">下一步</button>
+                    )}
                 </div>
             </div>
         </div>

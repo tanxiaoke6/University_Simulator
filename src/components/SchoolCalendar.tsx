@@ -6,7 +6,7 @@ interface SchoolCalendarProps {
     student: StudentState;
 }
 
-// Fixed start date for each year (e.g., September 1st)
+// Fixed start date for each year (September 1st)
 const GET_YEAR_START = (year: number, gaokaoYear: number) => {
     return new Date(gaokaoYear + (year - 1), 8, 1); // 8 is September (0-indexed)
 };
@@ -31,7 +31,14 @@ export default function SchoolCalendar({ student }: SchoolCalendarProps) {
     // Calculate current date based on game week and day
     const getGameCurrentDate = () => {
         const start = GET_YEAR_START(student.currentDate.year, student.gaokaoYear);
-        const daysToAdd = (student.currentDate.week - 1) * 7 + (student.currentDate.day - 1);
+        // Get the initial day (what day of the week September 1st is)
+        const startDayOfWeek = start.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const initialDay = startDayOfWeek === 0 ? 7 : startDayOfWeek; // Convert to 1-7 format
+
+        // Calculate days since September 1st
+        // Week 1, initialDay = Sept 1st
+        // Week 1, initialDay+1 = Sept 2nd, etc.
+        const daysToAdd = (student.currentDate.week - 1) * 7 + (student.currentDate.day - initialDay);
         const current = new Date(start);
         current.setDate(start.getDate() + daysToAdd);
         return current;

@@ -1,5 +1,5 @@
 // AI Service Layer - Handles LLM API calls with Robust Mock/Offline Fallbacks
-import type { LLMConfig, StudentState, GameEvent, EventChoice, GameDate } from '../types';
+import type { LLMConfig, StudentState, GameEvent, EventChoice, GameDate, Course } from '../types';
 
 // Generate unique ID
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -206,7 +206,8 @@ export const callLLM = async (
 export const generateDynamicEvent = async (
     config: LLMConfig,
     student: StudentState,
-    trigger?: string
+    trigger?: string,
+    locationContext?: { name: string; type: string }
 ): Promise<GameEvent | null> => {
     // 1. HARD SYNC CHECK: If no key, return IMMEDIATELY using Promise.resolve()
     if (!config.apiKey || config.apiKey.trim() === '') {
@@ -215,9 +216,20 @@ export const generateDynamicEvent = async (
     }
 
     const context = formatGameContext(student);
-    const userPrompt = trigger
-        ? `${context}\n\nTrigger: ${trigger}\nGenerate an event related to this trigger.`
-        : `${context}\n\nGenerate a random campus event appropriate for this student's situation.`;
+
+    // NPC Injection
+    const randomNpc = student.npcs[Math.floor(Math.random() * student.npcs.length)];
+    const npcInjection = randomNpc ? `Involve this NPC if possible: ${randomNpc.name} (${randomNpc.role})` : '';
+
+    let promptTrigger = trigger || '';
+    if (locationContext) {
+        promptTrigger += `\nCurrent Location: ${locationContext.name} (${locationContext.type}). Generate an event specific to this location.`;
+        if (locationContext.type === 'off_campus') promptTrigger += ' (Example: Shopping, Part-time job, City exploration)';
+        if (locationContext.type === 'academic') promptTrigger += ' (Example: Study, Research, Competition)';
+        if (locationContext.type === 'living') promptTrigger += ' (Example: Relaxing, Socializing, Dorm life)';
+    }
+
+    const userPrompt = `${context}\n\n${npcInjection}\n${promptTrigger ? `Trigger/Context: ${promptTrigger}` : 'Generate a random campus event.'}`;
 
     try {
         const response = await callLLM(config, SYSTEM_PROMPT, userPrompt);
@@ -471,5 +483,153 @@ export const generateMoment = async (
     } catch (error) {
         console.error('Moment generation LLM failed:', error);
         return '今天心情不错！';
+    }
+};
+/**
+ * Generates a list of courses using LLM based on major and grade.
+ */
+export const generateLLMCourses = async (
+    config: LLMConfig,
+    major: { name: string; id: string },
+    year: number,
+    semester: number,
+    count: number
+): Promise<Partial<Course>[]> => {
+    const semName = semester === 1 ? '上学期' : '下学期';
+    const yearName = year === 1 ? '大一' : year === 2 ? '大二' : year === 3 ? '大三' : '大四';
+
+    const systemPrompt = `你是一个大学教务系统模拟器。根据给定的专业和年级，生成一组符合逻辑的硬核课程。
+返回JSON格式: { "courses": [ { "name": "...", "credits": 2-4, "type": "Required/Elective", "statBonus": { "iq": 1-3, ... } } ] }
+生成的数量应为: ${count}。
+专业: ${major.name}
+年级: ${yearName}${semName}`;
+
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return []; // Caller handles fallback
+    }
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, `请生成 ${count} 门课程。`), 20000);
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response];
+        const data = JSON.parse(jsonMatch[1]?.trim() || response.trim());
+        return data.courses || [];
+    } catch (error) {
+        console.error('LLM Course generation failed:', error);
+        return [];
+    }
+};
+
+// ============ Game Tasks LLM Generation ============
+
+export interface GameTask {
+    id: string;
+    title: string;
+    description: string;
+    type: 'daily' | 'weekly' | 'story';
+    priority: 'high' | 'medium' | 'low';
+    reward?: string;
+}
+
+const MOCK_TASKS: GameTask[] = [
+    { id: 'task_1', title: '完成本周课程', description: '参加至少3节专业课', type: 'weekly', priority: 'high', reward: '+知识点' },
+    { id: 'task_2', title: '图书馆自习', description: '去一次图书馆复习功课', type: 'daily', priority: 'medium', reward: '+IQ' },
+    { id: 'task_3', title: '社交活动', description: '与同学或室友互动一次', type: 'daily', priority: 'low', reward: '+EQ' },
+];
+
+export const generateGameTasks = async (
+    config: LLMConfig,
+    student: StudentState
+): Promise<GameTask[]> => {
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return MOCK_TASKS;
+    }
+
+    const systemPrompt = `你是一个大学生活模拟游戏的任务系统。根据学生当前状态生成3-5个游戏任务。
+返回JSON格式: { "tasks": [ { "title": "...", "description": "...", "type": "daily/weekly/story", "priority": "high/medium/low", "reward": "+属性或奖励描述" } ] }
+任务类型: daily(日常), weekly(本周), story(剧情)
+任务应结合学生当前状态、学年、专业来生成。`;
+
+    const userPrompt = `学生: ${student.name}, 第${student.currentDate.year}年第${student.currentDate.week}周
+专业: ${student.academic.major.name}
+GPA: ${student.academic.gpa.toFixed(2)}
+属性: IQ ${student.attributes.iq}, EQ ${student.attributes.eq}, 体力 ${student.attributes.stamina}
+请生成任务。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 15000);
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response];
+        const data = JSON.parse(jsonMatch[1]?.trim() || response.trim());
+        return (data.tasks || []).map((t: any) => ({
+            id: `task_${generateId()}`,
+            title: t.title,
+            description: t.description,
+            type: t.type || 'daily',
+            priority: t.priority || 'medium',
+            reward: t.reward
+        }));
+    } catch (error) {
+        console.error('LLM Task generation failed:', error);
+        return MOCK_TASKS;
+    }
+};
+
+// ============ NPC Profile LLM Generation ============
+
+export interface NPCProfile {
+    backstory: string;
+    hobby: string;
+    dream: string;
+    secretTrait: string;
+    relationshipAdvice: string;
+}
+
+const MOCK_PROFILE: NPCProfile = {
+    backstory: '来自一个普通家庭，高考后来到这所大学，梦想着能够改变自己的命运。',
+    hobby: '喜欢在闲暇时间看动漫、打游戏，偶尔也会去操场跑步。',
+    dream: '希望毕业后能找到一份稳定的工作，买房买车，让父母过上好日子。',
+    secretTrait: '表面上看起来很开朗，但其实内心有些自卑，害怕被别人看不起。',
+    relationshipAdvice: '多关心ta的情绪变化，适当送些小礼物可以快速提升好感度。'
+};
+
+export const generateNPCProfile = async (
+    config: LLMConfig,
+    npc: { name: string; personality: string; role: string; gender: string },
+    student: StudentState
+): Promise<NPCProfile> => {
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return MOCK_PROFILE;
+    }
+
+    const systemPrompt = `你是一个大学生活模拟游戏的角色描述生成器。为给定的NPC生成详细的个人资料。
+返回JSON格式: { 
+    "backstory": "角色背景故事(50-100字)", 
+    "hobby": "兴趣爱好", 
+    "dream": "人生梦想", 
+    "secretTrait": "隐藏特质或秘密",
+    "relationshipAdvice": "攻略该角色的建议"
+}
+生成的内容应符合中国大学生活场景，语言生动有趣。`;
+
+    const userPrompt = `角色: ${npc.name}
+性别: ${npc.gender === 'male' ? '男' : '女'}
+身份: ${npc.role === 'roommate' ? '室友' : npc.role === 'classmate' ? '同学' : npc.role === 'professor' ? '教授' : npc.role === 'friend' ? '朋友' : '其他'}
+性格: ${npc.personality}
+玩家: ${student.name} (${student.academic.major.name}专业)
+请生成该角色的详细资料。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 15000);
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response];
+        const data = JSON.parse(jsonMatch[1]?.trim() || response.trim());
+        return {
+            backstory: data.backstory || MOCK_PROFILE.backstory,
+            hobby: data.hobby || MOCK_PROFILE.hobby,
+            dream: data.dream || MOCK_PROFILE.dream,
+            secretTrait: data.secretTrait || MOCK_PROFILE.secretTrait,
+            relationshipAdvice: data.relationshipAdvice || MOCK_PROFILE.relationshipAdvice
+        };
+    } catch (error) {
+        console.error('LLM NPC Profile generation failed:', error);
+        return MOCK_PROFILE;
     }
 };

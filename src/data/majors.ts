@@ -1,5 +1,6 @@
 // Majors Data - University Programs with Stat Bonuses
 import type { Major, MajorCategory } from '../types';
+import { COURSES_BY_MAJOR } from './courses';
 
 export const MAJORS: Major[] = [
     // ===== Science =====
@@ -10,7 +11,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 5, stress: 5 },
         difficulty: 8,
         employability: 60,
-        description: '探索宇宙基本规律，适合热爱思考的人'
+        description: '探索宇宙基本规律，适合热爱思考的人',
+        courses: [] // Generic courses for now
     },
     {
         id: 'chemistry',
@@ -19,7 +21,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 4 },
         difficulty: 7,
         employability: 55,
-        description: '研究物质结构与变化'
+        description: '研究物质结构与变化',
+        courses: []
     },
     {
         id: 'math',
@@ -28,7 +31,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 6, luck: -2 },
         difficulty: 9,
         employability: 70,
-        description: '学科之王，挂科之母'
+        description: '学科之王，挂科之母',
+        courses: []
     },
     {
         id: 'biology',
@@ -37,7 +41,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3 },
         difficulty: 6,
         employability: 45,
-        description: '21世纪是生物的世纪(吗？)'
+        description: '21世纪是生物的世纪(吗？)',
+        courses: []
     },
 
     // ===== Engineering =====
@@ -48,7 +53,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 4, luck: 3 },
         difficulty: 7,
         employability: 95,
-        description: '码农预备役，高薪代名词'
+        description: '码农预备役，高薪代名词',
+        courses: COURSES_BY_MAJOR['cs'] || []
     },
     {
         id: 'software',
@@ -57,7 +63,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3, charm: 1 },
         difficulty: 6,
         employability: 92,
-        description: '996的开始'
+        description: '996的开始',
+        courses: COURSES_BY_MAJOR['software'] || []
     },
     {
         id: 'ai',
@@ -66,7 +73,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 5, luck: 2 },
         difficulty: 8,
         employability: 90,
-        description: '风口上的猪也能飞'
+        description: '风口上的猪也能飞',
+        courses: COURSES_BY_MAJOR['ai'] || []
     },
     {
         id: 'ee',
@@ -75,7 +83,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 4 },
         difficulty: 8,
         employability: 85,
-        description: '强电弱电一把抓'
+        description: '强电弱电一把抓',
+        courses: []
     },
     {
         id: 'me',
@@ -84,7 +93,8 @@ export const MAJORS: Major[] = [
         statBonus: { stamina: 3, iq: 2 },
         difficulty: 7,
         employability: 75,
-        description: '工科万金油'
+        description: '工科万金油',
+        courses: []
     },
     {
         id: 'civil',
@@ -93,7 +103,8 @@ export const MAJORS: Major[] = [
         statBonus: { stamina: 5 },
         difficulty: 6,
         employability: 65,
-        description: '搬砖预备役(字面意思)'
+        description: '搬砖预备役(字面意思)',
+        courses: []
     },
     {
         id: 'architecture',
@@ -102,7 +113,8 @@ export const MAJORS: Major[] = [
         statBonus: { charm: 3, iq: 2 },
         difficulty: 7,
         employability: 70,
-        description: '每天都在画图'
+        description: '每天都在画图',
+        courses: []
     },
 
     // ===== Business =====
@@ -113,7 +125,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 3, charm: 2, luck: 2 },
         difficulty: 6,
         employability: 80,
-        description: '离钱最近的专业'
+        description: '离钱最近的专业',
+        courses: COURSES_BY_MAJOR['finance'] || []
     },
     {
         id: 'accounting',
@@ -122,7 +135,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 2, stress: 3 },
         difficulty: 5,
         employability: 75,
-        description: '考证考到头秃'
+        description: '考证考到头秃',
+        courses: COURSES_BY_MAJOR['accounting'] || []
     },
     {
         id: 'marketing',
@@ -131,7 +145,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 4, charm: 3 },
         difficulty: 4,
         employability: 65,
-        description: '人人都是销售'
+        description: '人人都是销售',
+        courses: []
     },
     {
         id: 'management',
@@ -140,7 +155,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 3, charm: 2 },
         difficulty: 4,
         employability: 60,
-        description: '什么都学什么都不精'
+        description: '什么都学什么都不精',
+        courses: []
     },
     {
         id: 'economics',
@@ -149,7 +165,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3, eq: 2 },
         difficulty: 6,
         employability: 70,
-        description: '理论与现实的差距'
+        description: '理论与现实的差距',
+        courses: COURSES_BY_MAJOR['economics'] || []
     },
 
     // ===== Liberal Arts =====
@@ -160,7 +177,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 4, charm: 2 },
         difficulty: 5,
         employability: 50,
-        description: '文青聚集地'
+        description: '文青聚集地',
+        courses: []
     },
     {
         id: 'english',
@@ -169,7 +187,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 3, charm: 2 },
         difficulty: 5,
         employability: 55,
-        description: '卷不过翻译机'
+        description: '卷不过翻译机',
+        courses: []
     },
     {
         id: 'history',
@@ -178,7 +197,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 2, eq: 2 },
         difficulty: 5,
         employability: 40,
-        description: '以史为鉴'
+        description: '以史为鉴',
+        courses: []
     },
     {
         id: 'philosophy',
@@ -187,7 +207,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3, eq: 3 },
         difficulty: 6,
         employability: 35,
-        description: '思考人生的终极问题'
+        description: '思考人生的终极问题',
+        courses: []
     },
     {
         id: 'journalism',
@@ -196,7 +217,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 4, charm: 3 },
         difficulty: 4,
         employability: 55,
-        description: '铁肩担道义'
+        description: '铁肩担道义',
+        courses: []
     },
 
     // ===== Arts =====
@@ -207,7 +229,8 @@ export const MAJORS: Major[] = [
         statBonus: { charm: 5, stress: 3 },
         difficulty: 5,
         employability: 60,
-        description: '甲方说再改改'
+        description: '甲方说再改改',
+        courses: COURSES_BY_MAJOR['design'] || []
     },
     {
         id: 'film',
@@ -216,7 +239,8 @@ export const MAJORS: Major[] = [
         statBonus: { eq: 3, charm: 4 },
         difficulty: 5,
         employability: 45,
-        description: '距离导演最近的专业'
+        description: '距离导演最近的专业',
+        courses: COURSES_BY_MAJOR['film'] || []
     },
     {
         id: 'music',
@@ -225,7 +249,8 @@ export const MAJORS: Major[] = [
         statBonus: { charm: 6 },
         difficulty: 5,
         employability: 40,
-        description: '艺术的代名词'
+        description: '艺术的代名词',
+        courses: COURSES_BY_MAJOR['music'] || []
     },
 
     // ===== Medicine =====
@@ -236,7 +261,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 4, stamina: -3, stress: 5 },
         difficulty: 10,
         employability: 90,
-        description: '劝人学医，天打雷劈'
+        description: '劝人学医，天打雷劈',
+        courses: COURSES_BY_MAJOR['clinical'] || []
     },
     {
         id: 'dentistry',
@@ -245,7 +271,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3, charm: 2 },
         difficulty: 8,
         employability: 88,
-        description: '牙科医生年入百万'
+        description: '牙科医生年入百万',
+        courses: COURSES_BY_MAJOR['dentistry'] || []
     },
 
     // ===== Law =====
@@ -256,7 +283,8 @@ export const MAJORS: Major[] = [
         statBonus: { iq: 3, eq: 2, stress: 4 },
         difficulty: 7,
         employability: 70,
-        description: '背书背到吐'
+        description: '背书背到吐',
+        courses: []
     },
 ];
 

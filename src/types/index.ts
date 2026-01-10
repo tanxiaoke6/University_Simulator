@@ -24,6 +24,40 @@ export interface Attributes {
     creativity?: number;  // Optional major-specific
 }
 
+// ============ Curriculum System ============
+
+export type TimeSlot = 'morning_1' | 'morning_2' | 'afternoon_1' | 'afternoon_2' | 'evening';
+
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
+
+export interface Course {
+    id: string;
+    name: string;
+    type: 'Required' | 'Elective';
+    credits: number;
+    statBonus: Partial<Attributes>;
+    energyCost: number;
+    description?: string;
+    semester?: number;        // Recommended semester (1-8)
+    requiredAttendance?: number; // Minimum attendance to pass (0.0-1.0), default 0.4
+}
+
+export interface CourseRecord {
+    courseId: string;
+    courseName: string;
+    attendedCount: number;
+    totalClasses: number;
+    grade: number; // 0.0 - 4.0
+    status: 'active' | 'passed' | 'failed';
+    semester: number;
+}
+
+export interface ScheduleEntry {
+    day: DayOfWeek;
+    slot: TimeSlot;
+    course: Course | null;
+}
+
 export interface AcademicInfo {
     gaokaoScore: number;
     universityTier: UniversityTier;
@@ -59,6 +93,7 @@ export interface Major {
     difficulty: number;
     employability: number;
     description?: string;
+    courses: Course[]; // Major-specific curriculum
 }
 
 export type MajorCategory =
@@ -328,25 +363,93 @@ export interface StudentState {
     eventHistory: GameEvent[];
 
     // Action Points System
-    actionPoints: number;      // Current available actions this week
-    maxActionPoints: number;   // Usually 3
+    actionPoints: number;           // General actions (7 per week)
+    maxActionPoints: number;
+    courseActionPoints: number;     // Course attendance (10 per week)
+    maxCourseActionPoints: number;
 
     // Expanded Modules
-    currentClub: string | null; // ID of joined club
+    clubState: ClubStateData | null; // Renamed from currentClub for deep integration
+    currentClub?: string; // KEEPING FOR COMPATIBILITY (will be deprecated/synced)
     currentJobId: string | null; // ID of active job
     wallet: Wallet;             // Digital Bank
+    weeklySchedule: ScheduleEntry[]; // Class schedule (15 slots: 5 days × 3 time slots)
+    courseRecords: Record<string, CourseRecord>; // Academic history
+    plannedAttendance: string[]; // IDs of schedule entries marked for attendance this week
     certificates: string[];      // IDs of active certificates/buffs
     pendingExams: PendingExam[]; // Exams in progress
     notifications: GameNotification[]; // System messages
     goals: LifeGoal[];          // Progress towards long-term objectives
     achievements: string[];     // Collected achievements
+    currentLocation?: string;   // Current location ID
+    quests: Quest[];             // Active and completed quests
     forumCache?: { [weekKey: string]: any[] };  // Weekly forum cache
+
+    // Dual-Track Club & Council System
+    clubs: InterestClubState;    // Interest Club membership (one club)
+    council: CouncilState;       // Student Council membership
 
     // LLM Context - Rolling summary for AI
     historySummary: string;
 }
 
+// ============ Quest System ============
+
+export type QuestType = 'Romance' | 'Academic' | 'Life';
+export type QuestStatus = 'Active' | 'Completed' | 'Failed';
+
+export interface QuestStage {
+    id: string;
+    name: string;
+    description: string;
+    isComplete: boolean;
+}
+
+export interface QuestReward {
+    money?: number;
+    attributes?: Partial<Attributes>;
+    honor?: string; // e.g., "国家奖学金获得者"
+    item?: string; // Item ID
+}
+
+export interface Quest {
+    id: string;
+    title: string;
+    description: string;
+    type: QuestType;
+    progress: number; // 0-100
+    status: QuestStatus;
+    stages?: QuestStage[];
+    currentStage?: number;
+    rewards: QuestReward;
+    triggerCondition?: string; // For display purposes
+}
+
 // ============ Clubs & Items ============
+
+// --- Deep Gameplay for Clubs & Council ---
+export type ClubRank = 'Member' | 'Vice President' | 'President';
+export type CouncilRank = 'Staff' | 'Minister' | 'Chairman';
+
+
+export interface ClubTask {
+    id: string;
+    name: string;
+    description: string;
+    difficulty: number; // 1-5
+    minRank: ClubRank;
+    energyCost: number;
+    rewards: {
+        reputation: number;
+        money?: number;
+        attribute?: { target: keyof Attributes; value: number };
+    };
+    requirements?: ActionRequirement[];
+}
+
+export interface ClubMember extends NPC {
+    rank: ClubRank;
+}
 
 export interface Club {
     id: string;
@@ -355,7 +458,53 @@ export interface Club {
     requirements: ActionRequirement[];
     benefits: ActionEffect[];
     location: string;
+
+    // Expanded Fields
+    members: ClubMember[];
+    tasks: ClubTask[];
 }
+
+export interface ClubStateData {
+    clubId: string;
+    rank: ClubRank;
+    reputation: number;
+    joinedDate: GameDate;
+}
+
+// Student Council Departments
+export type CouncilDepartment = 'secretariat' | 'discipline' | 'publicity';
+
+// NPC Model for Clubs
+export interface ClubNPC {
+    id: string;
+    name: string;
+    role: string;       // e.g. "Senior", "Newbie", "Treasurer"
+    intimacy: number;   // 0-100
+    avatar: string;     // Emoji or Icon ID
+}
+
+// Interest Club State (ONE club allowed)
+export interface InterestClubState {
+    id: string | null;                // Active Club ID
+    currentRank: ClubRank;
+    contribution: number;             // XP for promotion
+    members: ClubNPC[];               // Generated on join
+    unlockBudget: boolean;            // For President
+    pendingClubId: string | null;     // Club currently assessing (waiting for next week)
+    joinWeek: number;                 // Track seniority
+}
+
+// Student Council State (separate from clubs)
+export interface CouncilState {
+    joined: boolean;
+    department: CouncilDepartment | null;  // Which department
+    rank: CouncilRank;
+    reputation: number;               // XP for promotion
+    departmentKPI: number;            // 0-100%
+    authorityLevel: number;           // 1-3
+    contribution: number;             // Council specific contribution points
+}
+
 
 export interface Item {
     id: string;

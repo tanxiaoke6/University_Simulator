@@ -14,7 +14,7 @@ export default function NotificationOverlay() {
             if (oldest) {
                 dismissNotification(oldest.id);
             }
-        }, 3000);
+        }, 2000);
 
         return () => clearTimeout(timer);
     }, [student?.notifications, dismissNotification]);

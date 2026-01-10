@@ -17,13 +17,13 @@ interface ShoppingModalProps {
 }
 
 export default function ShoppingModal({ onClose }: ShoppingModalProps) {
-    const { student, updateStudent } = useGameStore();
+    const { student, updateStudent, addNotification } = useGameStore();
 
     if (!student) return null;
 
     const handleBuy = (item: Item) => {
         if (student.money < item.value) {
-            alert('钱不够了！去打工攒攒钱吧。');
+            addNotification('钱不够了！去打工攒攒钱吧。', 'error');
             return;
         }
 
@@ -35,15 +35,14 @@ export default function ShoppingModal({ onClose }: ShoppingModalProps) {
             inventory: newInventory
         });
 
-        // Optional: Simple feedback
-        console.log(`Bought ${item.name}`);
+        addNotification(`成功购买 ${item.name}，花费 ¥${item.value}`, 'success');
     };
 
 
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-dark-950/60 animate-fade-in">
-            <div className="max-w-4xl w-full glass-card h-[80vh] flex flex-col overflow-hidden border-primary-500/30">
+        <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 sm:p-6 backdrop-blur-md bg-dark-950/60 animate-fade-in overflow-y-auto">
+            <div className="max-w-4xl w-full glass-card h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden border-primary-500/30 my-auto animate-scale-in">
                 {/* Header */}
                 <div className="p-6 border-b border-dark-800 flex items-center justify-between bg-dark-900/50">
                     <div className="flex items-center gap-3">

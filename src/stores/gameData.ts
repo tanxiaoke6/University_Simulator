@@ -15,6 +15,9 @@ import type {
     FamilyWealth,
     LifeGoal,
     NPC,
+    ScheduleEntry,
+    DayOfWeek,
+    TimeSlot,
 } from '../types';
 import {
     getAvailableUniversities as getUnis
@@ -28,6 +31,7 @@ import {
     rollFamilyWealth as rollWealth,
     getRandomOccupation,
 } from '../data/backgrounds';
+import { generateSemesterSchedule } from '../data/courseGenerator';
 
 // Re-export for convenience
 export { ALLOWANCE_BY_WEALTH } from '../data/backgrounds';
@@ -247,13 +251,75 @@ export const INITIAL_GOALS: LifeGoal[] = [
     },
 ];
 
+// ============ Schedule Initialization ============
+
+// ============ Schedule Generation ============
+
+export const generateWeeklySchedule = async (config: GameConfig, major: Major, year: number, semester: number): Promise<ScheduleEntry[]> => {
+    const schedule: ScheduleEntry[] = [];
+    const days: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    const slots: TimeSlot[] = ['morning_1', 'morning_2', 'afternoon_1', 'afternoon_2', 'evening'];
+
+    // Generate courses for this semester (LLM-style procedural generation)
+    const semesterCourses = await generateSemesterSchedule(config.llm, major, year, semester);
+
+    // Shuffle slots helper
+    const shuffle = <T>(array: T[]): T[] => {
+        return array.sort(() => Math.random() - 0.5);
+    };
+
+    // Create all possible slots
+    let allSlots: { day: DayOfWeek, slot: TimeSlot }[] = [];
+    for (const day of days) {
+        for (const slot of slots) {
+            allSlots.push({ day, slot });
+        }
+    }
+
+    allSlots = shuffle(allSlots);
+
+    // Assign courses to slots
+    // Each course might appear 1-2 times a week depending on credits? 
+    // For simplicity in this iteration, each course appears once or twice to fill schedule.
+    // The user requested 50% density for Year 1, which generateSemesterSchedule handles by returning fewer courses.
+    // modifying generateSemesterSchedule to return unique courses, we place them here.
+
+    let slotIndex = 0;
+
+    for (const course of semesterCourses) {
+        // Place course in random empty slot
+        if (slotIndex < allSlots.length) {
+            const { day, slot } = allSlots[slotIndex];
+            schedule.push({ day, slot, course });
+            slotIndex++;
+        }
+
+        // If course has high credits (>3), maybe add a second session?
+        if (course.credits > 3 && slotIndex < allSlots.length && Math.random() > 0.5) {
+            const { day, slot } = allSlots[slotIndex];
+            schedule.push({ day, slot, course });
+            slotIndex++;
+        }
+    }
+
+    // Fill remaining slots with null explicitly if needed, or just let them be undefined in lookup
+    // But State expects ScheduleEntry[] to be the list of scheduled items. undefined items are "free time"
+
+    return schedule;
+};
+
+// Also keep a simple initialize wrapper for createInitialStudent
+export const initializeSchedule = async (config: GameConfig, major: Major): Promise<ScheduleEntry[]> => {
+    return await generateWeeklySchedule(config, major, 1, 1); // Start at Year 1 Semester 1
+};
+
 // ============ Create Initial Student ============
 
 const MALE_NAMES = ['张伟', '李强', '王磊', '刘洋', '陈杰', '杨帆', '赵鹏', '黄军'];
 const FEMALE_NAMES = ['李娜', '王芳', '刘婷', '陈静', '杨雪', '赵敏', '黄丽', '周颖'];
 const PERSONALITIES = ['开朗乐观', '内向安静', '幽默搞笑', '认真严谨', '热心助人', '我行我素', '学霸型', '社牛型'];
 
-export const createInitialStudent = (
+export const createInitialStudent = async (
     name: string,
     gender: Gender,
     age: number,
@@ -261,8 +327,9 @@ export const createInitialStudent = (
     gaokaoScore: number,
     university: University,
     major: Major,
-    gaokaoYear: number
-): StudentState => {
+    gaokaoYear: number,
+    config: GameConfig
+): Promise<StudentState> => {
     const occupation = getRandomOccupation(wealth);
 
     const baseAttrs: Attributes = {
@@ -375,7 +442,13 @@ export const createInitialStudent = (
         chatHistory: [],
     });
 
-    const initialDate: GameDate = { year: 1, semester: 1, week: 1, day: 1 };
+    // Calculate what day of the week September 1st falls on for the gaokaoYear
+    const sept1 = new Date(gaokaoYear, 8, 1); // September 1st of the gaokaoYear (first year of university)
+    const dayOfWeek = sept1.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    // Convert to game day format: 1 = Monday, 2 = Tuesday, ..., 7 = Sunday
+    const initialDay = dayOfWeek === 0 ? 7 : dayOfWeek;
+
+    const initialDate: GameDate = { year: 1, semester: 1, week: 1, day: initialDay };
 
     // Initial NPCs (Mom and Dad)
     const parents: NPC[] = [
@@ -434,9 +507,12 @@ export const createInitialStudent = (
         flags,
         currentDate: initialDate,
         eventHistory: [],
-        actionPoints: 5,
-        maxActionPoints: 5,
-        currentClub: null,
+        actionPoints: 7 - initialDate.day + 1,
+        maxActionPoints: 7,
+        courseActionPoints: 10,
+        maxCourseActionPoints: 10,
+        currentClub: undefined,
+        clubState: null,
         currentJobId: null,
         wallet: {
             balance: STARTING_MONEY[wealth],
@@ -450,11 +526,36 @@ export const createInitialStudent = (
                 }
             ]
         },
+        weeklySchedule: await initializeSchedule(config, major), // Auto-fill schedule based on major
+        courseRecords: {}, // Start with empty academic history
+        plannedAttendance: [], // No attendance planned initially
         certificates: [],
         pendingExams: [],
         notifications: [],
         goals: INITIAL_GOALS,
         achievements: [],
+        quests: [], // Initialize empty quest log
+
+        // Dual-Track Club & Council System
+        clubs: {
+            id: null,
+            currentRank: 'Member',
+            contribution: 0,
+            members: [],
+            unlockBudget: false,
+            pendingClubId: null,
+            joinWeek: 0,
+        },
+        council: {
+            joined: false,
+            department: null,
+            rank: 'Staff',
+            reputation: 0,
+            departmentKPI: 0,
+            authorityLevel: 1,
+            contribution: 0,
+        },
+
         historySummary: `${name}以${academic.gaokaoScore}分的成绩考入${university.name}${major.name}专业，开始了大学生活。`,
     };
 };

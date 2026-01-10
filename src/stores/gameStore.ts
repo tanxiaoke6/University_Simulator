@@ -10,14 +10,18 @@ import type {
     ActionType,
     ActionEffect,
     NPC,
+    ClubNPC,
     GameDate,
 } from '../types';
 import { CERTIFICATES } from '../data/certificates';
 import {
     getDefaultConfig,
     getNextEvent,
+    generateWeeklySchedule,
 } from './gameData';
-import { generateDynamicEvent, generateMockEventSync, generateNPCReply, generateProactiveMessage, generateMoment } from '../services/aiService';
+import { LOCATIONS } from '../data/locations';
+import { CLUBS } from '../data/clubs';
+import { generateDynamicEvent, generateMockEventSync, generateNPCReply } from '../services/aiService';
 
 interface GameActions {
     // Phase Management
@@ -32,6 +36,11 @@ interface GameActions {
     // Game Flow
     nextTurn: () => Promise<void>;
     processAction: (actionType: ActionType, apCost?: number) => void;
+
+    // Club Actions
+    joinClub: (clubId: string) => void;
+    quitClub: () => void;
+    performClubTask: (taskId: string) => void;
 
     // Emergency Recovery
     forceUnlock: () => void;
@@ -57,7 +66,6 @@ interface GameActions {
 
     // Async & Honors
     registerForExam: (certId: string) => void;
-    dismissNotification: (id: string) => void;
 
     // Chat
     sendChatMessage: (npcId: string, message: string) => Promise<void>;
@@ -70,6 +78,17 @@ interface GameActions {
     // Moments
     likeMoment: (npcId: string, momentId: string) => void;
     commentOnMoment: (npcId: string, momentId: string, content: string) => void;
+
+    // Curriculum Actions
+    toggleAttendance: (scheduleEntryId: string, cost: number) => void;
+
+    // Deep Club & Council Actions
+    interactWithClubMember: (memberId: string) => void;
+    updateCouncilKPI: (amount: number) => void;
+
+    // Notifications
+    addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+    dismissNotification: (id: string) => void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -116,44 +135,65 @@ export const useGameStore = create<GameStore>()(
                 student: state.student ? { ...state.student, ...update } : null
             })),
 
-            applyEffects: (effects) => set((state) => {
-                if (!state.student) return state;
-                const student = { ...state.student };
+            applyEffects: (effects) => {
+                const s = get().student;
+                if (!s) return;
+
+                const student = { ...s };
+                const messages: string[] = [];
 
                 try {
                     effects.forEach(effect => {
-                        // SANITY CHECK: Ignore effects with NaN values
-                        if (typeof effect.value !== 'number' || isNaN(effect.value)) {
-                            console.error('Ignored corrupted effect value:', effect);
-                            return;
-                        }
+                        if (typeof effect.value !== 'number' || isNaN(effect.value)) return;
 
                         if (effect.type === 'money') {
-                            student.money = Math.max(0, student.money + effect.value);
+                            const diff = effect.value;
+                            student.money = Math.max(0, student.money + diff);
+                            student.wallet.balance = student.money;
+                            messages.push(`${diff >= 0 ? '获得' : '支付'} ¥${Math.abs(diff)}`);
                         } else if (effect.type === 'attribute') {
                             const attr = effect.target as keyof typeof student.attributes;
+                            const diff = effect.value;
                             if (student.attributes[attr] !== undefined) {
-                                student.attributes[attr] = Math.min(100, Math.max(0, student.attributes[attr] + effect.value));
+                                student.attributes[attr] = Math.min(100, Math.max(0, student.attributes[attr] + diff));
+                                const attrLabels: Record<string, string> = {
+                                    stamina: '体力', iq: '智力', eq: '情商', charm: '魅力', luck: '运气', stress: '压力', employability: '就业力'
+                                };
+                                const label = attrLabels[attr] || attr;
+                                messages.push(`${label}${diff >= 0 ? '+' : ''}${diff}`);
                             }
                         } else if (effect.type === 'gpa') {
-                            student.academic.gpa = Math.min(4.0, Math.max(0, student.academic.gpa + effect.value));
-                            if (isNaN(student.academic.gpa)) student.academic.gpa = 2.0; // Panic recovery
+                            const diff = effect.value;
+                            student.academic.gpa = Math.min(4.0, Math.max(0, student.academic.gpa + diff));
+                            messages.push(`GPA${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`);
                         } else if (effect.type === 'relationship') {
                             const npc = student.npcs.find(n => n.id === effect.target);
                             if (npc) {
-                                npc.relationshipScore = Math.min(100, Math.max(-100, npc.relationshipScore + effect.value));
+                                const diff = effect.value;
+                                npc.relationshipScore = Math.min(100, Math.max(-100, npc.relationshipScore + diff));
+                                messages.push(`${npc.name}好感${diff >= 0 ? '+' : ''}${diff}`);
                             }
                         }
                     });
 
-                    // Final validation before commit
-                    if (isNaN(student.money)) student.money = 0;
+                    if (messages.length > 0) {
+                        student.notifications = [
+                            ...student.notifications,
+                            {
+                                id: `agg_notif_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+                                message: messages.join(', '),
+                                type: effects.some(e => e.value > 0) ? 'success' : 'info',
+                                read: false,
+                                timestamp: Date.now()
+                            }
+                        ];
+                    }
                 } catch (e) {
-                    console.error('Failed to apply effects safely:', e);
+                    console.error('Failed to apply effects:', e);
                 }
 
-                return { student };
-            }),
+                set({ student });
+            },
 
             processAction: (actionType, apCost = 1) => {
                 const { student, applyEffects } = get();
@@ -205,23 +245,17 @@ export const useGameStore = create<GameStore>()(
                         if (!state.student) return state;
                         let { day } = state.student.currentDate;
 
-                        // Advance day
+                        // Advance day: Every 1 AP = 1 Day
                         day += apCost;
-                        if (day > 7) {
-                            // If day overflows, we stay within the week for now or advance week?
-                            // User said: "每消耗一点本周行动力，校历的日期便要往后一天"
-                            // "如果本周没有全部消耗完，直接结束本周后，则直接跳到下一周"
-                            // This implies we don't overflow week inside processAction if we want to follow "next week" logic in nextTurn.
-                            // But if they consume 5 AP, and they start at day 1, it becomes day 6.
-                            // If they start at day 5 and consume 3 AP, it should probably cap at 7 or push to next week.
-                            // Let's keep it simple: day increment, week advancement in nextTurn if skipped.
-                        }
+
+                        // Capping day at 7 for this week. Week advancement happens in nextTurn.
+                        const newDay = Math.min(7, day);
 
                         return {
                             student: {
                                 ...state.student,
                                 actionPoints: Math.max(0, state.student.actionPoints - apCost),
-                                currentDate: { ...state.student.currentDate, day: Math.min(7, day) }
+                                currentDate: { ...state.student.currentDate, day: newDay }
                             }
                         };
                     });
@@ -230,272 +264,387 @@ export const useGameStore = create<GameStore>()(
                 applyEffects(effects);
             },
 
-            nextTurn: async () => {
-                const { student, config, isLoading } = get();
-                console.log("[1] nextTurn triggered");
+            // --- Club Logic ---
+            joinClub: (clubId: string) => {
+                const { student, addNotification } = get();
+                if (!student) return;
+                const club = CLUBS.find(c => c.id === clubId);
+                if (!club) return;
 
-                if (!student || isLoading) {
-                    console.warn("[!] nextTurn aborted: student null or already loading");
+                set(state => ({
+                    student: {
+                        ...state.student!,
+                        currentClub: clubId, // Legacy compatibility
+                        clubState: {
+                            clubId: clubId,
+                            rank: 'Member',
+                            reputation: 0,
+                            joinedDate: state.student!.currentDate
+                        }
+                    }
+                }));
+                addNotification(`恭喜加入 ${club.name}！`, 'success');
+            },
+
+            quitClub: () => {
+                const { student } = get();
+                if (!student) return;
+                set(state => ({
+                    student: {
+                        ...state.student!,
+                        currentClub: undefined,
+                        clubState: null
+                    }
+                }));
+                get().addNotification('你已退出该社团。', 'info');
+            },
+
+            performClubTask: (taskId: string) => {
+                const { student, updateStudent, addNotification } = get();
+                if (!student || !student.clubState) return;
+
+                const club = CLUBS.find(c => c.id === student.clubState!.clubId);
+                const task = club?.tasks.find(t => t.id === taskId);
+
+                if (!club || !task) return;
+
+                // Check Cost
+                if ((student.actionPoints || 0) < 1) {
+                    addNotification('行动点不足 (AP)', 'error');
+                    return;
+                }
+                if ((student.attributes.stamina || 0) < task.energyCost) {
+                    addNotification('体力不足', 'error');
                     return;
                 }
 
-                console.log("[2] Locking UI (isLoading = true)");
+                // Apply Deductions
+                const newAp = (student.actionPoints || 0) - 1;
+                const newStamina = (student.attributes.stamina || 0) - task.energyCost;
+
+                // Apply Rewards
+                const reputationGain = task.rewards.reputation;
+                // Use new dual-track clubs state
+                const currentRep = student.clubs.contribution + reputationGain;
+                let newRank = student.clubs.currentRank;
+
+                // Promotion Logic
+                let promotionMsg = '';
+                if (currentRep >= 300 && newRank !== 'President') {
+                    newRank = 'President';
+                    promotionMsg = '你被提拔为社团主席！解锁更多管理权限！';
+                } else if (currentRep >= 100 && newRank === 'Member') {
+                    newRank = 'Vice President';
+                    promotionMsg = '你晋升为副主席！';
+                }
+
+                // Attribute Rewards
+                const newAttributes = { ...student.attributes, stamina: newStamina };
+                if (task.rewards.attribute) {
+                    const attrKey = task.rewards.attribute.target as keyof typeof newAttributes;
+                    if (typeof newAttributes[attrKey] === 'number') {
+                        (newAttributes[attrKey] as number) += task.rewards.attribute.value;
+                    }
+                }
+
+                updateStudent({
+                    actionPoints: newAp,
+                    attributes: newAttributes,
+                    clubs: {
+                        ...student.clubs,
+                        contribution: currentRep,
+                        currentRank: newRank
+                    }
+                });
+
+                addNotification(`完成任务：${task.name} (声望 +${reputationGain})`, 'success');
+                if (promotionMsg) addNotification(promotionMsg, 'success');
+            },
+
+            nextTurn: async () => {
+                const { student, config, isLoading } = get();
+                if (!student || isLoading) return;
+
                 set({ isLoading: true, error: null });
 
                 try {
-                    // 1. Advance logical time
-                    console.log("[3] Calculating next date and resources...");
+                    // --- 1. Advance Date ---
                     let { year, semester, week, day } = student.currentDate;
                     week++;
-                    day = 1; // Reset day to Monday when advancing week
+                    day = 1; // Reset to Monday
+
+                    let newWeeklySchedule = student.weeklySchedule;
+                    let newNotifications = student.notifications || [];
+                    let newGPA = student.academic.gpa;
+
                     if (week > 20) {
                         week = 1;
                         semester++;
+
+                        // --- Semester End Logic ---
+                        // 1. Finalize Grades for Active Courses
+                        const courseRecords = { ...student.courseRecords };
+                        let totalGradePoints = 0;
+                        let totalAttemptedCredits = 0;
+
+                        Object.values(courseRecords).forEach(record => {
+                            if (record.status === 'active') {
+                                // Calculate Final Grade based on Attendance
+                                // Base calculation: 4.0 * Attendance Rate
+                                // Optionally adds exam score influence? For now, purely attendance driven + 0.5 random variance
+                                const attendanceRate = record.totalClasses > 0 ? (record.attendedCount / record.totalClasses) : 1;
+                                let finalScore = 4.0 * attendanceRate;
+
+                                // Random fluctuation for "Exam Performance" (+/- 0.5)
+                                finalScore += (Math.random() - 0.2);
+                                finalScore = Math.max(0, Math.min(4.0, finalScore));
+
+                                record.grade = Number(finalScore.toFixed(2));
+                                record.status = finalScore >= 1.0 ? 'passed' : 'failed';
+                            }
+
+                            // Accumulate for Cumulative GPA
+                            totalGradePoints += record.grade;
+                            totalAttemptedCredits += 1;
+                        });
+
+                        // 2. Update GPA
+                        newGPA = totalAttemptedCredits > 0 ? (totalGradePoints / totalAttemptedCredits) : 4.0;
+                        // @ts-ignore - fixing GPA access
+                        if (student.academic) newGPA = Number(newGPA.toFixed(2));
+
+                        // 3. Generate New Schedule
                         if (semester > 2) {
                             semester = 1;
                             year++;
                         }
+
+                        newWeeklySchedule = await generateWeeklySchedule(config, student.academic.major, year, semester);
+                        // studentUpdate.weeklySchedule = newSchedule; // Handled by newWeeklySchedule
+                        // studentUpdate.courseRecords = courseRecords; // Handled by courseRecords variable
+
+                        // Notify User
+                        newNotifications = [
+                            ...(student.notifications || []),
+                            {
+                                id: `sem_end_${Date.now()}`,
+                                message: `第 ${year} 学年 第 ${semester === 1 ? 2 : 1} 学期结束。你的 GPA 更新为: ${newGPA.toFixed(2)}`,
+                                type: 'info',
+                                read: false,
+                                timestamp: Date.now()
+                            }
+                        ];
+
+                        // End Semester Logic
                     }
 
                     if (year > 4) {
-                        console.log("[3.1] Player graduated. Transitioning to ending.");
                         set({ phase: 'ending' });
                         return;
                     }
 
                     const nextDate: GameDate = { year, semester, week, day };
-                    const studentUpdate: Partial<StudentState> = {
-                        currentDate: nextDate,
-                        actionPoints: student.maxActionPoints, // Reset AP on next turn
-                        attributes: {
-                            ...student.attributes,
-                            stamina: Math.min(100, student.attributes.stamina + 20),
-                            stress: Math.max(0, student.attributes.stress - 5)
-                        },
-                        wallet: {
-                            ...student.wallet,
-                            transactions: [
-                                ...student.wallet.transactions,
-                                {
-                                    id: `allowance_${Date.now()}`,
-                                    amount: student.family.monthlyAllowance,
-                                    type: 'income',
-                                    description: `第 ${week} 周生活费`,
-                                    timestamp: nextDate
-                                }
-                            ],
-                            balance: student.wallet.balance + student.family.monthlyAllowance
-                        },
-                        money: student.money + student.family.monthlyAllowance
+
+                    // --- 2. Calculate Weekly Updates (Allowance, Stamina, Stress) ---
+                    const transaction = {
+                        id: `allowance_${Date.now()}`,
+                        amount: student.family.monthlyAllowance,
+                        type: 'income' as const,
+                        description: `第 ${week} 周生活费`,
+                        timestamp: nextDate
                     };
 
-                    // Helper: Add money transaction
-                    const addTransaction = (amount: number, description: string, type: 'income' | 'expense') => {
-                        if (!studentUpdate.wallet) {
-                            studentUpdate.wallet = { ...student.wallet };
-                        }
-                        studentUpdate.wallet = {
-                            balance: (studentUpdate.wallet.balance || student.wallet.balance || 0) + amount,
-                            transactions: [
-                                ...(studentUpdate.wallet.transactions || student.wallet.transactions || []),
-                                {
-                                    id: `trans_${Date.now()}_${Math.random()}`,
-                                    amount: Math.abs(amount),
-                                    type,
-                                    description,
-                                    timestamp: nextDate
-                                }
-                            ]
+                    const newAttributes = {
+                        ...student.attributes,
+                        stamina: Math.min(100, student.attributes.stamina + 20),
+                        stress: Math.max(0, student.attributes.stress - 5)
+                    };
+
+                    // --- 2.5. Process Pending Club Applications ---
+                    let updatedClubs = student.clubs;
+                    if (student.clubs.pendingClubId) {
+                        const pendingClub = CLUBS.find(c => c.id === student.clubs.pendingClubId);
+                        // Generate 3 random club NPCs
+                        const clubNPCs: ClubNPC[] = [
+                            { id: `club_npc_${Date.now()}_1`, name: '陈同学', role: '资深社员', intimacy: 10, avatar: '👤' },
+                            { id: `club_npc_${Date.now()}_2`, name: '李社长', role: '财务总监', intimacy: 5, avatar: '💼' },
+                            { id: `club_npc_${Date.now()}_3`, name: '王萌新', role: '新加入者', intimacy: 15, avatar: '🌱' },
+                        ];
+
+                        updatedClubs = {
+                            id: student.clubs.pendingClubId,
+                            currentRank: 'Member',
+                            members: clubNPCs,
+                            unlockBudget: false,
+                            contribution: 0,
+                            pendingClubId: null,
+                            joinWeek: week,
                         };
-                    };
-
-                    // Add monthly allowance
-                    if (week % 4 === 1) {
-                        addTransaction(student.family.monthlyAllowance, '生活费', 'income');
-                    }
-
-                    // Handle Job Income
-                    if (student.flags.hasJob) {
-                        addTransaction(300, '兼职工资', 'income');
-                    }
-
-                    // Commit logical state change
-                    set((state) => {
-                        const s = state.student;
-                        if (!s) return state;
-
-                        const updatedS = { ...s, ...studentUpdate };
-
-                        // --- Async Exam Check ---
-                        const currentWeekIndex = (nextDate.year - 1) * 40 + (nextDate.semester - 1) * 20 + nextDate.week;
-                        const finishedExams = updatedS.pendingExams.filter(e => currentWeekIndex >= e.finishWeek);
-                        const remainingExams = updatedS.pendingExams.filter(e => currentWeekIndex < e.finishWeek);
-
-                        finishedExams.forEach(exam => {
-                            const roll = Math.random() * 100;
-                            const passed = roll < exam.passChance;
-
-                            if (passed) {
-                                updatedS.certificates = [...updatedS.certificates, exam.certId];
-                                updatedS.notifications.push({
-                                    id: `exam_pass_${Date.now()}_${exam.certId}`,
-                                    message: `🎉 考试通过！你已获得 [${exam.name}] 证书。`,
-                                    type: 'success',
-                                    read: false,
-                                    timestamp: Date.now()
-                                });
-                            } else {
-                                updatedS.notifications.push({
-                                    id: `exam_fail_${Date.now()}_${exam.certId}`,
-                                    message: `❌ 考试未通过：[${exam.name}]。别灰心，下次再试！`,
-                                    type: 'error',
-                                    read: false,
-                                    timestamp: Date.now()
-                                });
-                            }
-                        });
-                        updatedS.pendingExams = remainingExams;
-
-                        // --- Year-End Honor Check ---
-                        if (nextDate.week === 20 && nextDate.semester === 2) {
-                            const hasScholarship = updatedS.academic.gpa >= 3.8 && updatedS.attributes.eq >= 70;
-                            if (hasScholarship && !updatedS.certificates.includes('national_scholarship')) {
-                                updatedS.wallet.balance += 8000;
-                                updatedS.certificates.push('national_scholarship');
-                                updatedS.wallet.transactions.push({
-                                    id: `sch_${Date.now()}`,
-                                    amount: 8000,
-                                    type: 'income',
-                                    description: '年度国家奖学金',
-                                    timestamp: nextDate
-                                });
-                                updatedS.notifications.push({
-                                    id: `honor_${Date.now()}`,
-                                    message: `🌟 荣誉时刻！由于表现优异，你被授予 [国家奖学金]！`,
-                                    type: 'success',
-                                    read: false,
-                                    timestamp: Date.now()
-                                });
-                            }
-                        }
-
-                        return { student: updatedS };
-                    });
-
-                    // 2. Proactive Messaging & Moments (20% chance per week)
-                    const eligibleNPCs = student.npcs.filter(n => n.id !== 'game_assistant');
-
-                    // A: Proactive Message (Single lucky NPC)
-                    if (Math.random() < 0.2) {
-                        const messagingNPCs = eligibleNPCs.filter(n => n.relationshipScore > 10);
-                        if (messagingNPCs.length > 0) {
-                            const luckyNPC = messagingNPCs[Math.floor(Math.random() * messagingNPCs.length)];
-                            const npcIndex = student.npcs.findIndex(n => n.id === luckyNPC.id);
-
-                            try {
-                                const proactiveText = await generateProactiveMessage(config.llm, luckyNPC, student);
-                                const npcMsg = { role: 'npc' as const, content: proactiveText, timestamp: Date.now() };
-
-                                set((state) => {
-                                    if (!state.student) return state;
-                                    const newNpcs = [...state.student.npcs];
-                                    const currentNpc = { ...newNpcs[npcIndex] };
-                                    currentNpc.chatHistory = [...(currentNpc.chatHistory || []), npcMsg];
-                                    newNpcs[npcIndex] = currentNpc;
-
-                                    const newNotifications = [
-                                        ...state.student.notifications,
-                                        {
-                                            id: `chat_notify_${Date.now()}`,
-                                            message: `💬 ${luckyNPC.name} 给你发了一条新消息`,
-                                            type: 'info' as const,
-                                            read: false,
-                                            timestamp: Date.now()
-                                        }
-                                    ];
-                                    return { student: { ...state.student, npcs: newNpcs, notifications: newNotifications } };
-                                });
-                            } catch (e) { console.error("Proactive msg error", e); }
+                        if (pendingClub) {
+                            newNotifications.push({
+                                id: `club_join_${Date.now()}`,
+                                type: 'success',
+                                message: `🎉 恭喜！你已正式加入「${pendingClub.name}」!`,
+                                timestamp: Date.now(),
+                                read: false,
+                            });
                         }
                     }
 
-                    // B: Generate Moments (Check for each NPC)
-                    const momentsPromises = eligibleNPCs.map(async (npc) => {
-                        if (Math.random() < 0.2) { // 20% chance per NPC to post a moment
-                            try {
-                                const content = await generateMoment(config.llm, npc, nextDate);
-                                return {
-                                    npcId: npc.id,
-                                    moment: {
-                                        id: `moment_${npc.id}_${Date.now()}`,
-                                        content,
-                                        images: [], // Placeholder for images if needed
-                                        likes: [],
-                                        comments: [],
-                                        timestamp: nextDate
-                                    }
-                                };
-                            } catch (e) { return null; }
-                        }
-                        return null;
-                    });
+                    // --- 2.6. Weekly Council KPI Decay & Promotion ---
+                    let updatedCouncil = student.council;
+                    if (student.council.joined) {
+                        // KPI decays slightly each week (-2%)
+                        let newKPI = Math.max(0, updatedCouncil.departmentKPI - 2);
+                        let newRank = updatedCouncil.rank;
+                        let newRep = updatedCouncil.reputation + 5; // Passive reputation gain
+                        let newAuth = updatedCouncil.authorityLevel;
 
-                    // Resolve moments and update state
-                    Promise.all(momentsPromises).then((results) => {
-                        const newMoments = results.filter(r => r !== null) as { npcId: string, moment: any }[];
-                        if (newMoments.length > 0) {
-                            set((state) => {
-                                if (!state.student) return state;
-                                const newNpcs = [...state.student.npcs];
-                                newMoments.forEach(({ npcId, moment }) => {
-                                    const idx = newNpcs.findIndex(n => n.id === npcId);
-                                    if (idx !== -1) {
-                                        newNpcs[idx] = {
-                                            ...newNpcs[idx],
-                                            moments: [moment, ...(newNpcs[idx].moments || [])]
-                                        };
-                                    }
-                                });
-                                return { student: { ...state.student, npcs: newNpcs } };
+                        // Promotion thresholds
+                        if (newRep >= 500 && newRank === 'Minister') {
+                            newRank = 'Chairman';
+                            newAuth = 3;
+                            newNotifications.push({ id: `sc_prom_${Date.now()}`, type: 'success', message: '你晋升为学生会主席！', timestamp: Date.now(), read: false });
+                        } else if (newRep >= 200 && newRank === 'Staff') {
+                            newRank = 'Minister';
+                            newAuth = 2;
+                            newNotifications.push({ id: `sc_prom_${Date.now()}`, type: 'success', message: '你晋升为学生会部长！', timestamp: Date.now(), read: false });
+                        }
+
+                        updatedCouncil = {
+                            ...updatedCouncil,
+                            departmentKPI: newKPI,
+                            reputation: newRep,
+                            rank: newRank,
+                            authorityLevel: newAuth
+                        };
+                    }
+
+
+                    // --- 3. Process Attendance & Academic ---
+                    // Logic: Iterate schedule. If planned, mark attended. Else skipped.
+                    const weeklySchedule = student.weeklySchedule || [];
+                    const plannedAttendance = student.plannedAttendance || [];
+                    let courseRecords = { ...student.courseRecords };
+
+                    weeklySchedule.forEach(entry => {
+                        if (!entry.course) return;
+
+                        const recordId = entry.course.id;
+                        if (!courseRecords[recordId]) {
+                            courseRecords[recordId] = {
+                                courseId: entry.course.id,
+                                courseName: entry.course.name,
+                                attendedCount: 0,
+                                totalClasses: 0,
+                                grade: 4.0,
+                                status: 'active',
+                                semester: student.currentDate.semester
+                            };
+                        }
+
+                        courseRecords[recordId].totalClasses++;
+
+                        const slotId = `${entry.day}_${entry.slot}`;
+                        if (plannedAttendance.includes(slotId)) {
+                            courseRecords[recordId].attendedCount++;
+                            // Apply Course Stat Bonuses
+                            Object.entries(entry.course.statBonus).forEach(([key, val]) => {
+                                // @ts-ignore
+                                if (newAttributes[key] !== undefined) {
+                                    // @ts-ignore
+                                    newAttributes[key] = Math.min(100, newAttributes[key] + (val || 0));
+                                }
                             });
                         }
                     });
 
-                    // 3. Event Generation
-                    console.log("[4] Attempting to generate event...");
+                    // --- 4. Generate Event (Async) ---
                     let event: GameEvent | null = null;
+                    const currentLocationId = student.currentLocation;
+                    const locationObj = LOCATIONS.find(l => l.id === currentLocationId);
+                    const locationContext = locationObj ? { name: locationObj.name, type: locationObj.category } : undefined;
 
                     try {
-                        // This call is now "Safer" due to generateDynamicEvent's own fallback
-                        console.log("[5] Calling AI Service generateDynamicEvent...");
-                        event = await generateDynamicEvent(config.llm, student);
-                        console.log("[6] AI Service call complete. Event received:", event?.title);
-                    } catch (llmError) {
-                        console.error("[!] AI Service stage crashed:", llmError);
-                        // Hard synchronous fallback
+                        event = await generateDynamicEvent(config.llm, { ...student, currentDate: nextDate }, undefined, locationContext);
+                    } catch (e) {
                         event = generateMockEventSync(nextDate);
                     }
+                    if (!event) event = getNextEvent(student, nextDate);
 
-                    if (!event) {
-                        console.warn("[!] No event generated, falling back to static registry");
-                        event = getNextEvent(student, nextDate);
-                    }
-
-                    console.log("[7] Setting event and transitioning phase...");
-                    set({
-                        currentEvent: event,
-                        phase: 'event',
-                        error: config.llm.apiKey ? null : '离线模式运行中 (未配置 API Key)'
+                    // --- 5. Apply All Changes ---
+                    set(state => {
+                        if (!state.student) return state;
+                        return {
+                            student: {
+                                ...state.student,
+                                currentDate: nextDate,
+                                attributes: newAttributes,
+                                academic: {
+                                    ...state.student.academic,
+                                    gpa: newGPA
+                                },
+                                wallet: {
+                                    ...state.student.wallet,
+                                    balance: state.student.wallet.balance + student.family.monthlyAllowance,
+                                    transactions: [...state.student.wallet.transactions, transaction]
+                                },
+                                courseRecords: courseRecords, // This contains updated grades/status
+                                weeklySchedule: newWeeklySchedule, // This might be new semester schedule
+                                notifications: newNotifications,
+                                plannedAttendance: [], // Reset plan for the new week
+                                // Dynamic AP based on remaining days (e.g. if week starts late)
+                                actionPoints: Math.max(0, 7 - nextDate.day + 1),
+                                courseActionPoints: state.student.maxCourseActionPoints, // Refresh Course AP
+                                clubs: updatedClubs, // Updated club membership
+                                council: updatedCouncil, // Updated council membership
+                            },
+                            currentEvent: event,
+                            phase: 'event',
+                            isLoading: false,
+                            error: null
+                        };
                     });
-                    console.log("[7.1] Transition complete");
+
+                    // --- 6. Check Quest Triggers ---
+                    // Import dynamically to avoid circular dependency
+                    import('../stores/questStore').then(({ checkAllQuestTriggers }) => {
+                        checkAllQuestTriggers();
+                    });
 
                 } catch (err: any) {
-                    console.error("[!!!] FATAL CRASH in nextTurn loop:", err);
-                    set({ error: `致命流程错误: ${err.message || '未知错误'}` });
-                } finally {
-                    console.log("[8] Unlocking UI (isLoading = false)");
-                    set({ isLoading: false });
+                    console.error("NextTurn Error", err);
+                    set({ error: err.message, isLoading: false });
                 }
+            },
+
+            toggleAttendance: (scheduleEntryId: string, cost: number) => {
+                set(state => {
+                    if (!state.student) return state;
+                    const plan = state.student.plannedAttendance || [];
+                    const cap = state.student.courseActionPoints;
+
+                    if (plan.includes(scheduleEntryId)) {
+                        // Refund
+                        return {
+                            student: {
+                                ...state.student,
+                                plannedAttendance: plan.filter(id => id !== scheduleEntryId),
+                                courseActionPoints: Math.min(state.student.maxCourseActionPoints, cap + cost)
+                            }
+                        };
+                    } else {
+                        // Charge
+                        if (cap < cost) return state;
+                        return {
+                            student: {
+                                ...state.student,
+                                plannedAttendance: [...plan, scheduleEntryId],
+                                courseActionPoints: cap - cost
+                            }
+                        };
+                    }
+                });
             },
 
             resolveEvent: (choiceId) => {
@@ -525,6 +674,25 @@ export const useGameStore = create<GameStore>()(
                     set({ currentEvent: null, phase: 'playing' });
                 }
             },
+
+            addNotification: (message, type = 'info') => set(state => {
+                if (!state.student) return state;
+                return {
+                    student: {
+                        ...state.student,
+                        notifications: [
+                            ...state.student.notifications,
+                            {
+                                id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                                message,
+                                type,
+                                read: false,
+                                timestamp: Date.now()
+                            }
+                        ]
+                    }
+                };
+            }),
 
             setConfig: (configUpdate: Partial<GameConfig>) => set((state) => ({
                 config: { ...state.config, ...configUpdate }
@@ -979,6 +1147,47 @@ export const useGameStore = create<GameStore>()(
 
                 return { student: { ...state.student, npcs: newNpcs } };
             }),
+
+            // Deep Club & Council Actions
+            interactWithClubMember: (memberId: string) => set((state) => {
+                if (!state.student || !state.student.clubs.id) return state;
+                const memberIndex = state.student.clubs.members.findIndex(m => m.id === memberId);
+                if (memberIndex === -1) return state;
+
+                const newMembers = [...state.student.clubs.members];
+                const member = newMembers[memberIndex];
+
+                // Simple interaction: +5 intimacy, +2 contribution
+                newMembers[memberIndex] = {
+                    ...member,
+                    intimacy: Math.min(100, member.intimacy + 5)
+                };
+
+                return {
+                    student: {
+                        ...state.student,
+                        clubs: {
+                            ...state.student.clubs,
+                            members: newMembers,
+                            contribution: state.student.clubs.contribution + 2
+                        }
+                    }
+                };
+            }),
+
+            updateCouncilKPI: (amount: number) => set((state) => {
+                if (!state.student || !state.student.council.joined) return state;
+                return {
+                    student: {
+                        ...state.student,
+                        council: {
+                            ...state.student.council,
+                            departmentKPI: Math.max(0, Math.min(100, state.student.council.departmentKPI + amount))
+                        }
+                    }
+                };
+            }),
+
 
             deleteFriend: (npcId: string) => set((state) => {
                 if (!state.student) return state;

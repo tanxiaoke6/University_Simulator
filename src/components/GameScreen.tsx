@@ -7,17 +7,19 @@ import ActionPanel from './ActionPanel';
 import TutorialOverlay, { useTutorial } from './TutorialOverlay';
 import CampusMap from './CampusMap';
 import StudentAffairs from './StudentAffairs';
-import { Settings, Loader2, Target, MessageSquare, Map as MapIcon, GraduationCap, Users, Calendar, ClipboardList } from 'lucide-react';
+import { Settings, Loader2, Target, MessageSquare, Map as MapIcon, GraduationCap, Users, Calendar, ClipboardList, Heart } from 'lucide-react';
 import SchoolCalendar from './SchoolCalendar';
 import { useState } from 'react';
 import GoalTrackerModal from './GoalTrackerModal';
 import TaskBoard from './TaskBoard';
+import ClassSchedule from './ClassSchedule';
+import ClubManagement from './ClubManagement';
 
 interface GameScreenProps {
     onOpenSettings: () => void;
 }
 
-type GameTab = 'campus' | 'feed' | 'affairs' | 'club' | 'schedule' | 'calendar' | 'task';
+type GameTab = 'campus' | 'feed' | 'affairs' | 'club' | 'schedule' | 'calendar' | 'task' | 'lover';
 
 export default function GameScreen({ onOpenSettings }: GameScreenProps) {
     const { student, isLoading, error } = useGameStore();
@@ -39,6 +41,10 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                         <span className="text-primary-400 font-bold tracking-tight">第{student.currentDate.year}学年</span>
                         <span className="text-dark-500">/</span>
                         <span className="text-accent-400 font-bold tracking-tight">第{student.currentDate.week}周</span>
+                        <span className="text-dark-500">/</span>
+                        <span className="text-blue-400 font-bold tracking-tight">
+                            {['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'][student.currentDate.day]}
+                        </span>
                     </div>
 
                     {/* Tab Switcher - Order: Campus, Feed, Affairs, Club, Schedule */}
@@ -99,6 +105,14 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                             <ClipboardList className="w-4 h-4" />
                             任务
                         </button>
+                        <button
+                            onClick={() => setActiveTab('lover')}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'lover' ? 'bg-pink-600 text-white shadow-lg' : 'text-dark-500 hover:text-dark-300'
+                                }`}
+                        >
+                            <Heart className="w-4 h-4" />
+                            恋人
+                        </button>
                     </nav>
                 </div>
 
@@ -133,28 +147,24 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                         {activeTab === 'campus' && <CampusMap />}
                         {activeTab === 'feed' && <StoryFeed events={student.eventHistory.slice(-50)} />}
                         {activeTab === 'affairs' && <StudentAffairs />}
-                        {activeTab === 'club' && (
-                            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in">
-                                <Users className="w-16 h-16 text-dark-600" />
-                                <h2 className="text-xl font-bold text-dark-300">社团管理</h2>
-                                <p className="text-dark-500 text-sm">功能开发中，敬请期待...</p>
-                                <div className="text-[10px] text-dark-600 mt-4 px-4 py-2 bg-dark-800/50 rounded-lg border border-dark-700">
-                                    Coming Soon: 加入社团、参与活动、获得社交经验
-                                </div>
-                            </div>
-                        )}
+                        {activeTab === 'club' && <ClubManagement />}
                         {activeTab === 'schedule' && (
-                            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in">
-                                <Calendar className="w-16 h-16 text-dark-600" />
-                                <h2 className="text-xl font-bold text-dark-300">我的课表</h2>
-                                <p className="text-dark-500 text-sm">此功能正在快马加鞭开发中...</p>
-                                <div className="text-[10px] text-dark-600 mt-4 px-4 py-2 bg-dark-800/50 rounded-lg border border-dark-700">
-                                    Coming Soon: 查看本周课程、选课功能、教室查询
-                                </div>
-                            </div>
+                            <ClassSchedule />
                         )}
                         {activeTab === 'calendar' && <SchoolCalendar student={student} />}
                         {activeTab === 'task' && <TaskBoard />}
+                        {activeTab === 'lover' && (
+                            <div className="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in">
+                                <div className="w-20 h-20 rounded-full bg-pink-900/20 flex items-center justify-center">
+                                    <Heart className="w-10 h-10 text-pink-500" />
+                                </div>
+                                <h2 className="text-xl font-bold text-pink-300">恋人系统</h2>
+                                <p className="text-dark-500 text-sm">功能开发中，敬请期待...</p>
+                                <div className="text-[10px] text-dark-600 mt-4 px-4 py-2 bg-pink-800/10 rounded-lg border border-pink-700/30">
+                                    Coming Soon: 约会、告白、恋爱事件
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="p-6 border-t border-dark-800/50 bg-dark-950/80 backdrop-blur-md shrink-0">

@@ -38,8 +38,8 @@ function EventCard({ event, index }: { event: GameEvent; index: number }) {
             {/* Header */}
             <div className="flex items-center gap-2 mb-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${event.isLLMGenerated
-                        ? 'bg-gradient-to-br from-primary-500 to-accent-500'
-                        : 'bg-dark-700'
+                    ? 'bg-gradient-to-br from-primary-500 to-accent-500'
+                    : 'bg-dark-700'
                     }`}>
                     {event.isLLMGenerated ? (
                         <Bot className="w-4 h-4 text-white" />
@@ -50,7 +50,7 @@ function EventCard({ event, index }: { event: GameEvent; index: number }) {
                 <div className="flex-1">
                     <h3 className="font-medium">{event.title}</h3>
                     <p className="text-xs text-dark-500">
-                        第{event.timestamp.year}年 {event.timestamp.month}月
+                        第{event.timestamp.year}年 {event.timestamp.semester === 1 ? '秋季' : '春季'} 第{event.timestamp.week}周
                         {event.isLLMGenerated && (
                             <span className="ml-2 text-primary-400">• AI生成</span>
                         )}
