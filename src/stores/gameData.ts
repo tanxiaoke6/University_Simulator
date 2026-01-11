@@ -361,7 +361,7 @@ export const createInitialStudent = async (
         universityTier: university.tier,
         universityName: university.name,
         major,
-        gpa: 0,
+        gpa: 3.5, // Starting GPA - will be recalculated at semester end based on attendance
         knowledgePoints: 0,
         failedExams: 0,
         cet6Score: 0,
@@ -538,6 +538,7 @@ export const createInitialStudent = async (
         plannedAttendance: [], // No attendance planned initially
         certificates: [],
         pendingExams: [],
+        activeProjects: [],
         notifications: [],
         goals: INITIAL_GOALS,
         achievements: [],

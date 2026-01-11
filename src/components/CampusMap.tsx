@@ -170,7 +170,7 @@ export default function CampusMap() {
                                 <button
                                     key={idx}
                                     onClick={() => handleAction(action.type, action.label, action.cost)}
-                                    disabled={isLoading || (action.cost > 0 && actionPoints <= 0)}
+                                    disabled={isLoading || (action.cost > 0 && actionPoints < action.cost)}
                                     className="flex items-center justify-between p-5 rounded-xl border border-dark-700 bg-dark-800/40 hover:bg-dark-700/60 hover:border-primary-500/50 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <div className="flex items-center gap-4">

@@ -272,19 +272,41 @@ const parseEventResponse = (
         const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonMatch) jsonStr = jsonMatch[1];
 
-        const data = JSON.parse(jsonStr.trim());
-        const choices: EventChoice[] = data.choices.map((c: any, idx: number) => ({
-            id: `choice_${idx}`,
-            text: c.text,
-            effects: Object.entries(c.effects || {}).map(([key, val]) => {
-                if (key === 'gpa') return { type: 'gpa' as const, target: 'gpa', value: val as number };
-                if (key === 'money') return { type: 'money' as const, target: 'money', value: val as number };
-                return { type: 'attribute' as const, target: key, value: val as number };
-            }),
-        }));
+        // Try to extract JSON from response
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
 
-        if (choices.length === 0) {
-            console.warn('LLM generated event with no choices, falling back to mock.');
+        const data = JSON.parse(jsonStr.trim());
+
+        // Handle choices - AI might return different formats
+        const rawChoices = data.choices || data.options || [];
+
+        const choices: EventChoice[] = rawChoices.map((c: any, idx: number) => {
+            // Try multiple possible field names for choice text
+            const choiceText = c.text || c.label || c.option || c.content || c.name || c.choice || '';
+
+            // If choice is a string directly (e.g., ["选项1", "选项2"])
+            const finalText = typeof c === 'string' ? c : choiceText;
+
+            return {
+                id: `choice_${idx}`,
+                text: finalText || `选项 ${idx + 1}`,
+                effects: Object.entries(c.effects || {}).map(([key, val]) => {
+                    if (key === 'gpa') return { type: 'gpa' as const, target: 'gpa', value: val as number };
+                    if (key === 'money') return { type: 'money' as const, target: 'money', value: val as number };
+                    return { type: 'attribute' as const, target: key, value: val as number };
+                }),
+            };
+        });
+
+        // Filter out choices with empty text and ensure at least one valid choice
+        const validChoices = choices.filter(c => c.text && c.text.trim() !== '');
+
+        if (validChoices.length === 0) {
+            console.warn('LLM generated event with no valid choices, falling back to mock.');
             return null;
         }
 
@@ -293,7 +315,7 @@ const parseEventResponse = (
             type: 'dynamic',
             title: data.title || '校园事件',
             description: data.description || '发生了一些事情...',
-            choices,
+            choices: validChoices,
             isLLMGenerated: true,
             timestamp: currentDate,
         };
@@ -520,6 +542,119 @@ export const generateForumPosts = async (
             tag: '校园',
             comments: []
         }));
+    }
+};
+
+// ============ Confession Detection System ============
+
+const CONFESSION_DETECTION_PROMPT = `你是一个对话分析助手。判断用户的消息是否是向对方表白/告白/示爱。
+表白的特征包括：表达喜欢、爱意、想在一起、想做男/女朋友等。
+只需回复 "是" 或 "否"，不要解释。`;
+
+// Offline fallback keywords for confession detection
+const CONFESSION_KEYWORDS = [
+    '喜欢你', '爱你', '我喜欢', '我爱', '做我女朋友', '做我男朋友',
+    '在一起', '交往', '告白', '表白', '牵手', '约会吧',
+    '我的心', '暗恋', '心动', '一辈子', '嫁给我', '娶我'
+];
+
+/**
+ * Detects if a message is a love confession.
+ * Uses LLM when available, falls back to keyword matching offline.
+ */
+export const detectConfession = async (
+    config: LLMConfig,
+    message: string
+): Promise<boolean> => {
+    // Offline fallback: keyword matching
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return CONFESSION_KEYWORDS.some(keyword => message.includes(keyword));
+    }
+
+    try {
+        const response = await withTimeout(
+            callLLM(config, CONFESSION_DETECTION_PROMPT, `用户消息: "${message}"\n\n这是表白吗？只回复"是"或"否"。`),
+            10000
+        );
+        const result = response.trim().toLowerCase();
+        return result.includes('是') || result.includes('yes') || result.includes('true');
+    } catch (error) {
+        console.error('[Confession Detection] LLM failed, using keyword fallback:', error);
+        return CONFESSION_KEYWORDS.some(keyword => message.includes(keyword));
+    }
+};
+
+// ============ Sentiment Analysis System ============
+
+const SENTIMENT_ANALYSIS_PROMPT = `你是一个对话情感分析助手。分析用户发给朋友的消息，判断这条消息对接收者的感受是：
+- positive: 友善、关心、赞美、鼓励、有趣、温暖的消息
+- negative: 冒犯、伤人、侮辱、冷漠、讽刺、让人难过的消息
+- neutral: 普通问候、日常对话、信息询问
+
+只回复一个词: positive / negative / neutral`;
+
+// Offline fallback keywords
+const POSITIVE_KEYWORDS = [
+    '谢谢', '感谢', '开心', '高兴', '太棒了', '厉害', '加油', '支持你', '相信你',
+    '好可爱', '真好', '不错', '优秀', '真厉害', '你最棒', '辛苦了', '很开心',
+    '想你', '挂念', '担心你', '关心', '保重', '照顾好自己', '很高兴', '真开心'
+];
+
+const NEGATIVE_KEYWORDS = [
+    '讨厌', '烦死', '滚', '白痴', '蠢', '傻逼', '去死', '恶心', '丑',
+    '无聊', '烦人', '讨厌你', '别烦我', '不想理你', '不想说话', '闭嘴',
+    '你真差', '没用', '废物', '垃圾', '不配', '活该', '可怜', '真惨'
+];
+
+export type SentimentType = 'positive' | 'negative' | 'neutral';
+
+export interface SentimentResult {
+    sentiment: SentimentType;
+    scoreChange: number; // Suggested relationship score change
+}
+
+/**
+ * Analyzes the sentiment of a chat message.
+ * Returns positive/negative/neutral and suggested score change.
+ */
+export const analyzeSentiment = async (
+    config: LLMConfig,
+    message: string
+): Promise<SentimentResult> => {
+    // Offline fallback: keyword matching
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        if (POSITIVE_KEYWORDS.some(kw => message.includes(kw))) {
+            return { sentiment: 'positive', scoreChange: 3 };
+        }
+        if (NEGATIVE_KEYWORDS.some(kw => message.includes(kw))) {
+            return { sentiment: 'negative', scoreChange: -5 };
+        }
+        return { sentiment: 'neutral', scoreChange: 1 };
+    }
+
+    try {
+        const response = await withTimeout(
+            callLLM(config, SENTIMENT_ANALYSIS_PROMPT, `用户消息: "${message}"\n\n情感分类是？只回复 positive/negative/neutral 其中之一。`),
+            8000
+        );
+        const result = response.trim().toLowerCase();
+
+        if (result.includes('positive') || result.includes('正面') || result.includes('友善')) {
+            return { sentiment: 'positive', scoreChange: 3 };
+        }
+        if (result.includes('negative') || result.includes('负面') || result.includes('伤人')) {
+            return { sentiment: 'negative', scoreChange: -5 };
+        }
+        return { sentiment: 'neutral', scoreChange: 1 };
+    } catch (error) {
+        console.error('[Sentiment Analysis] LLM failed, using keyword fallback:', error);
+        if (POSITIVE_KEYWORDS.some(kw => message.includes(kw))) {
+            return { sentiment: 'positive', scoreChange: 3 };
+        }
+        if (NEGATIVE_KEYWORDS.some(kw => message.includes(kw))) {
+            return { sentiment: 'negative', scoreChange: -5 };
+        }
+        return { sentiment: 'neutral', scoreChange: 1 };
     }
 };
 

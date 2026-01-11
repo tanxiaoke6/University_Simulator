@@ -81,7 +81,7 @@ export const LOCATIONS: Location[] = [
         icon: Building2,
         color: 'slate',
         actions: [
-            { type: 'work', label: '缴纳学费', cost: 0, stamina: 0, desc: '缴纳本学期的学杂费。', bonus: '金钱 -' },
+            { type: 'pay_fees', label: '缴纳学费', cost: 0, stamina: 0, desc: '缴纳本学期的学杂费。', bonus: '金钱 -' },
         ]
     },
 
@@ -107,7 +107,6 @@ export const LOCATIONS: Location[] = [
         color: 'orange',
         actions: [
             { type: 'relax', label: '悠闲午餐', cost: 0, stamina: 15, desc: '享用一顿美餐，恢复少量体力。', bonus: '不计步数' },
-            { type: 'work', label: '前往超市', cost: 0, stamina: 0, desc: '购买生活用品和零食。', bonus: '开启商店面板' },
         ]
     },
     {

@@ -1,15 +1,61 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../../../stores/gameStore';
 import { usePhoneStore } from '../../../stores/phoneStore';
-import { MessageCircle, Search, Heart, User, Users, Send, ChevronLeft, Loader2, Aperture, Camera, ThumbsUp, MessageSquare } from 'lucide-react';
+import { MessageCircle, Search, Heart, User, Users, Send, ChevronLeft, Loader2, Aperture, Camera } from 'lucide-react';
 
 type SocialTab = 'chat' | 'contacts' | 'moments' | 'me';
 
+// Helper: Generate random age based on role
+const getNPCAge = (role: string): number => {
+    switch (role) {
+        case 'professor': return 35 + Math.floor(Math.random() * 20); // 35-55
+        case 'employer': return 28 + Math.floor(Math.random() * 15); // 28-43
+        default: return 18 + Math.floor(Math.random() * 5); // 18-22 for students
+    }
+};
+
+// Helper: Generate hobbies based on role
+const getNPCHobbies = (role: string, personality: string): string[] => {
+    const hobbyMap: Record<string, string[]> = {
+        'professor': ['学术研究', '阅读', '写作', '品茶'],
+        'roommate': ['打游戏', '看剧', '熬夜', '外卖'],
+        'classmate': ['自习', '社团活动', '逛街', '拍照'],
+        'crush': ['听音乐', '看电影', '散步', '摄影'],
+        'partner': ['约会', '做饭', '旅行', '健身'],
+        'friend': ['聚餐', '唱K', '桌游', '运动'],
+        'employer': ['工作', '管理', '面试', '商务'],
+        'forum_friend': ['发帖', '冲浪', '吃瓜', '追番'],
+    };
+    return hobbyMap[role] || ['学习', '交友', '探索'];
+};
+
+// Helper: Get relationship status label
+const getRelationshipStatus = (score: number, role: string): { label: string; color: string } => {
+    if (role === 'partner') return { label: '恋人', color: 'text-pink-500' };
+    if (role === 'crush') return { label: '暗恋对象', color: 'text-pink-400' };
+    if (score >= 80) return { label: '亲密好友', color: 'text-purple-500' };
+    if (score >= 60) return { label: '好朋友', color: 'text-blue-500' };
+    if (score >= 40) return { label: '朋友', color: 'text-green-500' };
+    if (score >= 20) return { label: '熟人', color: 'text-yellow-500' };
+    return { label: '认识', color: 'text-slate-400' };
+};
+
+// Helper: Get role label in Chinese
+const getRoleLabel = (role: string): string => {
+    const labels: Record<string, string> = {
+        'roommate': '室友', 'classmate': '同学', 'professor': '老师',
+        'crush': '暗恋对象', 'partner': '恋人', 'friend': '朋友',
+        'rival': '对手', 'employer': '雇主', 'forum_friend': '网友',
+    };
+    return labels[role] || role;
+};
+
 export default function SocialApp() {
-    const { student, Rb, sendChatMessage, finishChat } = useGameStore();
+    const { student, sendChatMessage, finishChat } = useGameStore();
     const { closeApp } = usePhoneStore();
     const [activeTab, setActiveTab] = useState<SocialTab>('chat');
     const [selectedNPCId, setSelectedNPCId] = useState<string | null>(null);
+    const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
     const [chatInput, setChatInput] = useState('');
     const [isSending, setIsSending] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -253,8 +299,172 @@ export default function SocialApp() {
                 )}
 
                 {activeTab === 'contacts' && (
-                    <div className="p-4 text-center text-slate-400 text-xs mt-20">
-                        通讯录功能开发中...
+                    <div className="animate-fade-in">
+                        {/* Profile View */}
+                        {viewingProfileId ? (() => {
+                            const npc = npcs.find(n => n.id === viewingProfileId);
+                            if (!npc) return null;
+                            const age = getNPCAge(npc.role);
+                            const hobbies = getNPCHobbies(npc.role, npc.personality);
+                            const relStatus = getRelationshipStatus(npc.relationshipScore, npc.role);
+                            const genderLabel = npc.gender === 'male' ? '男' : '女';
+                            const genderColor = npc.gender === 'male' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600';
+
+                            return (
+                                <div className="flex flex-col h-full">
+                                    {/* Profile Header */}
+                                    <div className="bg-gradient-to-b from-slate-700 to-slate-800 p-4 text-center relative">
+                                        <button
+                                            onClick={() => setViewingProfileId(null)}
+                                            className="absolute left-2 top-2 p-1 hover:bg-white/10 rounded-full"
+                                        >
+                                            <ChevronLeft className="w-5 h-5 text-white" />
+                                        </button>
+                                        {/* Avatar */}
+                                        <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl font-bold text-white shadow-lg ${npc.role === 'professor' ? 'bg-slate-500' :
+                                            npc.role === 'crush' || npc.role === 'partner' ? 'bg-gradient-to-br from-pink-400 to-rose-500' :
+                                                'bg-gradient-to-br from-blue-400 to-indigo-500'
+                                            }`}>
+                                            {npc.avatar || npc.name[0]}
+                                        </div>
+                                        <h2 className="text-white font-bold text-lg mt-3">{npc.name}</h2>
+                                        <div className="flex items-center justify-center gap-2 mt-1">
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${genderColor}`}>{genderLabel}</span>
+                                            <span className="text-slate-300 text-xs">{age}岁</span>
+                                            <span className="text-slate-400 text-xs">· {getRoleLabel(npc.role)}</span>
+                                        </div>
+                                        {(npc.role === 'partner' || npc.role === 'crush') && (
+                                            <Heart className="absolute top-3 right-3 w-5 h-5 text-pink-400 fill-pink-400" />
+                                        )}
+                                    </div>
+
+                                    {/* Profile Content */}
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                                        {/* Relationship Status */}
+                                        <div className="bg-white rounded-xl p-3 shadow-sm">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs text-slate-500">关系状态</span>
+                                                <span className={`text-xs font-bold ${relStatus.color}`}>{relStatus.label}</span>
+                                            </div>
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full transition-all duration-500 ${npc.relationshipScore >= 80 ? 'bg-gradient-to-r from-pink-400 to-rose-500' :
+                                                        npc.relationshipScore >= 60 ? 'bg-blue-500' :
+                                                            npc.relationshipScore >= 40 ? 'bg-green-500' :
+                                                                'bg-yellow-500'
+                                                        }`}
+                                                    style={{ width: `${Math.max(0, Math.min(100, npc.relationshipScore))}%` }}
+                                                />
+                                            </div>
+                                            <div className="text-right text-[10px] text-slate-400 mt-1">好感度: {npc.relationshipScore}/100</div>
+                                        </div>
+
+                                        {/* Personality */}
+                                        <div className="bg-white rounded-xl p-3 shadow-sm">
+                                            <h4 className="text-xs text-slate-500 mb-2">性格特点</h4>
+                                            <p className="text-sm text-slate-800">{npc.personality}</p>
+                                        </div>
+
+                                        {/* Hobbies */}
+                                        <div className="bg-white rounded-xl p-3 shadow-sm">
+                                            <h4 className="text-xs text-slate-500 mb-2">兴趣爱好</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {hobbies.map((hobby, i) => (
+                                                    <span key={i} className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">
+                                                        {hobby}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedNPCId(npc.id);
+                                                    setViewingProfileId(null);
+                                                    setActiveTab('chat');
+                                                }}
+                                                className="flex-1 bg-[#07c160] text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                                            >
+                                                <MessageCircle className="w-4 h-4" />
+                                                发消息
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })() : (
+                            /* Contacts List */
+                            <div>
+                                {/* Search placeholder */}
+                                <div className="p-2 bg-slate-100">
+                                    <div className="bg-white rounded-md p-1.5 flex items-center justify-center gap-1 text-slate-400 text-[10px]">
+                                        <Search className="w-3 h-3" />
+                                        <span>搜索联系人</span>
+                                    </div>
+                                </div>
+
+                                {/* NPC List by Category */}
+                                {(() => {
+                                    const contactNPCs = npcs.filter(n => n.role !== 'parent' && n.role !== 'game_assistant');
+                                    const groups: { label: string; npcs: typeof contactNPCs }[] = [
+                                        { label: '💕 特别关心', npcs: contactNPCs.filter(n => n.role === 'partner' || n.role === 'crush') },
+                                        { label: '👥 好友', npcs: contactNPCs.filter(n => n.role === 'friend' || n.role === 'forum_friend') },
+                                        { label: '🏠 室友', npcs: contactNPCs.filter(n => n.role === 'roommate') },
+                                        { label: '📚 同学', npcs: contactNPCs.filter(n => n.role === 'classmate') },
+                                        { label: '👔 老师/雇主', npcs: contactNPCs.filter(n => n.role === 'professor' || n.role === 'employer') },
+                                    ].filter(g => g.npcs.length > 0);
+
+                                    return groups.map((group, gIdx) => (
+                                        <div key={gIdx}>
+                                            <div className="px-3 py-2 bg-slate-50 text-xs text-slate-500 font-medium sticky top-0">
+                                                {group.label}
+                                            </div>
+                                            {group.npcs.map(npc => (
+                                                <button
+                                                    key={npc.id}
+                                                    onClick={() => setViewingProfileId(npc.id)}
+                                                    className="w-full flex items-center gap-3 p-3 border-b border-slate-100 active:bg-slate-50 transition-colors text-left"
+                                                >
+                                                    <div className="relative shrink-0">
+                                                        <div className={`w-11 h-11 rounded-lg flex items-center justify-center font-bold text-white ${npc.role === 'professor' ? 'bg-slate-500' :
+                                                            npc.role === 'crush' || npc.role === 'partner' ? 'bg-pink-400' :
+                                                                'bg-blue-500'
+                                                            }`}>
+                                                            {npc.avatar || npc.name[0]}
+                                                        </div>
+                                                        {npc.role === 'partner' && (
+                                                            <Heart className="absolute -bottom-1 -right-1 w-4 h-4 text-pink-500 fill-pink-500 bg-white rounded-full p-0.5" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-sm text-slate-900">{npc.name}</span>
+                                                            <span className={`text-[10px] ${npc.gender === 'male' ? 'text-blue-500' : 'text-pink-500'}`}>
+                                                                {npc.gender === 'male' ? '♂' : '♀'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-400 truncate">{npc.personality}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className={`text-[10px] font-medium ${getRelationshipStatus(npc.relationshipScore, npc.role).color}`}>
+                                                            {npc.relationshipScore}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ));
+                                })()}
+
+                                {npcs.filter(n => n.role !== 'parent' && n.role !== 'game_assistant').length === 0 && (
+                                    <div className="p-8 text-center text-slate-400 text-xs mt-10">
+                                        暂无联系人<br />去认识些新朋友吧
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 

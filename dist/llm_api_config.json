@@ -1,9 +1,9 @@
 {
     "llm": {
         "provider": "openai",
-        "apiKey": "ms-77bdee4e-1d92-44fe-a9b9-29770a49d959",
-        "baseUrl": "https://api-inference.modelscope.cn/v1",
-        "model": "deepseek-ai/DeepSeek-R1-0528",
+        "apiKey": "2644eeed51a9434399ff140482358118.tTbQOXu0ynC2W4TI",
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "GLM-4.6V-Flash",
         "maxTokens": 1000,
         "temperature": 0.8
     },

@@ -22,7 +22,7 @@ import {
 } from './gameData';
 import { LOCATIONS } from '../data/locations';
 import { CLUBS } from '../data/clubs';
-import { generateDynamicEvent, generateMockEventSync, generateNPCReply, generateWeeklyDirectorPlan, consolidateMemory } from '../services/aiService';
+import { generateDynamicEvent, generateMockEventSync, generateNPCReply, generateWeeklyDirectorPlan, consolidateMemory, detectConfession, analyzeSentiment } from '../services/aiService';
 
 interface GameActions {
     // Phase Management
@@ -239,7 +239,7 @@ export const useGameStore = create<GameStore>()(
                         // We can't easily call get().advanceProject for EACH one inside this reducer smoothly without side effects?
                         // Actually we can, but let's just do it manually or trigger it.
                         // Better: Iterate active projects and advance them.
-                        if (student.activeProjects.length > 0) {
+                        if (student.activeProjects && student.activeProjects.length > 0) {
                             // Advance Search: random one or all? Let's advance ALL active 'research' or 'competition' projects by a small amount.
                             // Amount = 5 * IQ/100?
                             const progressAmount = 5 + (student.attributes.iq * 0.1);
@@ -271,7 +271,7 @@ export const useGameStore = create<GameStore>()(
                     case 'socialize':
                         effects.push({ type: 'attribute', target: 'eq', value: 0.3 });
                         effects.push({ type: 'attribute', target: 'stamina', value: -10 });
-                        effects.push({ type: 'attribute', target: 'money', value: -100 });
+                        effects.push({ type: 'money', target: 'money', value: -100 });
                         break;
                     case 'pay_fees': // Special Case: Admin Building - Pay Fees
                         effects.push({ type: 'money', target: 'money', value: -500 }); // Example: Deduct 500 for fees
@@ -449,28 +449,33 @@ export const useGameStore = create<GameStore>()(
                         Object.values(courseRecords).forEach(record => {
                             if (record.status === 'active') {
                                 // Calculate Final Grade based on Attendance
-                                // Base calculation: 4.0 * Attendance Rate
-                                // Optionally adds exam score influence? For now, purely attendance driven + 0.5 random variance
-                                const attendanceRate = record.totalClasses > 0 ? (record.attendedCount / record.totalClasses) : 1;
-                                let finalScore = 4.0 * attendanceRate;
+                                // Base calculation: High attendance = good grades (3.0-4.0 range)
+                                const attendanceRate = record.totalClasses > 0 ? (record.attendedCount / record.totalClasses) : 0.8;
 
-                                // Random fluctuation for "Exam Performance" (+/- 0.5)
-                                finalScore += (Math.random() - 0.2);
-                                finalScore = Math.max(0, Math.min(4.0, finalScore));
+                                // Base GPA: 3.0 + 1.0 * attendanceRate (so 80% attendance = 3.8 GPA)
+                                let finalScore = 3.0 + (1.0 * attendanceRate);
+
+                                // Random fluctuation for "Exam Performance" (+/- 0.3)
+                                finalScore += (Math.random() - 0.5) * 0.6;
+                                finalScore = Math.max(2.0, Math.min(4.0, finalScore));
 
                                 record.grade = Number(finalScore.toFixed(2));
-                                record.status = finalScore >= 1.0 ? 'passed' : 'failed';
+                                record.status = finalScore >= 2.0 ? 'passed' : 'failed';
                             }
 
-                            // Accumulate for Cumulative GPA
-                            totalGradePoints += record.grade;
-                            totalAttemptedCredits += 1;
+                            // Only include courses with valid grades in GPA calculation
+                            if (record.grade > 0 && (record.status === 'passed' || record.status === 'failed')) {
+                                totalGradePoints += record.grade;
+                                totalAttemptedCredits += 1;
+                            }
                         });
 
-                        // 2. Update GPA
-                        newGPA = totalAttemptedCredits > 0 ? (totalGradePoints / totalAttemptedCredits) : 4.0;
-                        // @ts-ignore - fixing GPA access
-                        if (student.academic) newGPA = Number(newGPA.toFixed(2));
+                        // 2. Update GPA - If no courses taken yet, keep current GPA
+                        if (totalAttemptedCredits > 0) {
+                            newGPA = totalGradePoints / totalAttemptedCredits;
+                            newGPA = Number(newGPA.toFixed(2));
+                        }
+                        // else: keep newGPA as student.academic.gpa (already set at line 437)
 
                         // 3. Generate New Schedule
                         if (semester > 2) {
@@ -1182,6 +1187,79 @@ export const useGameStore = create<GameStore>()(
                     return { student: { ...state.student, npcs: newNpcs } };
                 });
 
+                // ============ Confession Detection & Romance System ============
+                // Check if this is a confession message
+                const isConfessing = await detectConfession(config.llm, message);
+
+                if (isConfessing && !isGameAssistant && npc.role !== 'parent') {
+                    const playerGender = student.gender;
+                    const npcGender = npc.gender;
+                    const isOppositeGender = playerGender !== npcGender;
+                    const hasHighAffection = npc.relationshipScore >= 80;
+                    const isAlreadyPartner = npc.role === 'partner';
+
+                    let confessionReply = '';
+                    let newRole = npc.role;
+                    let newScore = npc.relationshipScore;
+
+                    if (isAlreadyPartner) {
+                        // Already in relationship
+                        confessionReply = `我们不是早就在一起了吗？ 😊💕 你今天怎么突然这么说~`;
+                        newScore = Math.min(100, npc.relationshipScore + 5);
+                    } else if (!isOppositeGender) {
+                        // Same gender - polite rejection
+                        confessionReply = `啊...谢谢你的心意，但是我...我们还是做好朋友吧 😅`;
+                    } else if (hasHighAffection) {
+                        // SUCCESS! Confession accepted
+                        confessionReply = `我...其实我也一直喜欢你！ 💕 我愿意和你在一起！`;
+                        newRole = 'partner';
+                        newScore = 100;
+
+                        // Add notification for successful confession
+                        const { addNotification } = get();
+                        addNotification(`🎉 表白成功！你和 ${npc.name} 正式成为恋人了！`, 'success');
+                    } else {
+                        // FAIL - affection too low
+                        const rejectionResponses = [
+                            `嗯...我觉得我们现在这样挺好的，做朋友不好吗？`,
+                            `对不起...现在的我还没有准备好开始一段感情...`,
+                            `我很感动，但是...我需要时间考虑一下...`,
+                            `谢谢你的心意，但我对你的感觉还没到那个程度...`
+                        ];
+                        confessionReply = rejectionResponses[Math.floor(Math.random() * rejectionResponses.length)];
+                        newScore = Math.max(0, npc.relationshipScore - 5); // Slight decrease on rejection
+                    }
+
+                    // Update NPC with confession result
+                    const npcMsg = { role: 'npc' as const, content: confessionReply, timestamp: Date.now() };
+
+                    set((state) => {
+                        if (!state.student) return state;
+                        const newNpcs = [...state.student.npcs];
+                        const targetNpcIndex = newNpcs.findIndex(n => n.id === npcId);
+                        if (targetNpcIndex === -1) return state;
+
+                        const currentNpc = { ...newNpcs[targetNpcIndex] };
+                        const currentHistory = currentNpc.chatHistory || [];
+
+                        newNpcs[targetNpcIndex] = {
+                            ...currentNpc,
+                            chatHistory: [...currentHistory, npcMsg],
+                            relationshipScore: newScore,
+                            role: newRole as any,
+                        };
+
+                        return { student: { ...state.student, npcs: newNpcs } };
+                    });
+
+                    return; // Exit early - confession handled
+                }
+                // ============ End Confession System ============
+
+                // ============ Sentiment Analysis for Relationship Changes ============
+                // Analyze the message sentiment to determine relationship score change
+                const sentimentResult = await analyzeSentiment(config.llm, message);
+
                 // Generate NPC reply
                 try {
                     const reply = await generateNPCReply(
@@ -1193,6 +1271,7 @@ export const useGameStore = create<GameStore>()(
                     );
 
                     const npcMsg = { role: 'npc' as const, content: reply, timestamp: Date.now() };
+                    const scoreChange = isGameAssistant ? 0 : sentimentResult.scoreChange;
 
                     // Update state with NPC reply and relationship gain
                     set((state) => {
@@ -1204,11 +1283,9 @@ export const useGameStore = create<GameStore>()(
                         const currentNpc = { ...newNpcs[targetNpcIndex] };
                         const currentHistory = currentNpc.chatHistory || [];
 
-                        // Increase relationship score (if not assistant, max 100)
+                        // Apply sentiment-based relationship score change
                         let newScore = currentNpc.relationshipScore;
-                        if (!isGameAssistant) {
-                            newScore = Math.min(100, newScore + 2);
-                        }
+                        newScore = Math.max(-100, Math.min(100, newScore + scoreChange));
 
                         // Keyword Rewards (Study or Work)
                         let rewardMsg = "";
