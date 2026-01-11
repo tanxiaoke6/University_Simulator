@@ -145,7 +145,8 @@ export interface NPC {
     personality: string;       // For LLM roleplay context
     avatar?: string;
     metDate: GameDate;
-    chatHistory?: ChatMessage[]; // NPC chat history
+    chatHistory?: ChatMessage[]; // NPC chat history (短期记忆)
+    longTermMemories: string[]; // Phase 3: 长期记忆 (关键事实列表)
     moments?: Moment[];  // WeChat Moments (朋友圈)
     viewMomentsPermission?: boolean;  // Whether player can view moments
     parentPride?: number; // Pride score for parent NPCs
@@ -384,6 +385,7 @@ export interface StudentState {
     currentLocation?: string;   // Current location ID
     quests: Quest[];             // Active and completed quests
     forumCache?: { [weekKey: string]: any[] };  // Weekly forum cache
+    taskCache?: { [weekKey: string]: any[] };   // Weekly task cache
 
     // Dual-Track Club & Council System
     clubs: InterestClubState;    // Interest Club membership (one club)
@@ -391,6 +393,10 @@ export interface StudentState {
 
     // LLM Context - Rolling summary for AI
     historySummary: string;
+
+    // Phase 1: AI Director 周报/日记
+    weeklyDiary?: string;
+    worldNews?: string;
 }
 
 // ============ Quest System ============
@@ -556,6 +562,7 @@ export type GamePhase =
     | 'playing'
     | 'event'
     | 'chat'
+    | 'exam'    // Phase 2: 考试模态
     | 'ending';
 
 export interface GameState {
@@ -564,6 +571,7 @@ export interface GameState {
     config: GameConfig;
     currentEvent: GameEvent | null;
     currentChatNPC: string | null;
+    currentExamCourse: string | null; // Phase 2: Current exam course name
     isLoading: boolean;
     error: string | null;
 }
@@ -585,4 +593,27 @@ export interface SaveData {
     timestamp: number;
     student: StudentState;
     config: GameConfig;
+}
+
+// ============ AI Director System (Phase 1) ============
+
+export interface DirectorResponse {
+    narrative: string;        // 本周故事描述
+    worldNews: string;        // 校园/社会新闻头条
+    statChanges: Partial<Attributes & { money?: number; gpa?: number }>;
+    specialEventId?: string;  // 可选：触发特殊事件
+}
+
+// ============ Exam System (Phase 2) ============
+
+export interface ExamQuestion {
+    text: string;
+    options: string[];
+    correctIndex: number;
+}
+
+export interface ExamResult {
+    score: number;        // 0-100
+    gpaModifier: number;  // 0.0 - 4.0
+    comment: string;      // AI 评语
 }

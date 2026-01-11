@@ -31,7 +31,7 @@ import {
 import type { NPC } from '../types';
 
 export default function RightSidebar() {
-    const { student, useItem, sendChatMessage, config, addFriendFromForum, toggleMomentsPermission, deleteFriend, likeMoment, commentOnMoment } = useGameStore();
+    const { student, useItem, sendChatMessage, finishChat, config, addFriendFromForum, toggleMomentsPermission, deleteFriend, likeMoment, commentOnMoment } = useGameStore();
     const [activeTab, setActiveTab] = useState<'apps' | 'items'>('apps');
     const [openApp, setOpenApp] = useState<'none' | 'wechat' | 'forum' | 'bank' | 'moments' | 'tiktok' | 'quests' | 'relationships'>('none');
     const [selectedNPC, setSelectedNPC] = useState<NPC | null>(null);
@@ -652,7 +652,15 @@ export default function RightSidebar() {
                 {/* WeChat Header */}
                 <header className="p-3 border-b border-dark-700/50 flex items-center justify-between bg-[#2a2a2a] shrink-0 relative">
                     <div className="flex items-center gap-3">
-                        <button onClick={() => selectedNPC ? setSelectedNPC(null) : setOpenApp('none')} className="p-1 hover:bg-dark-700 rounded-lg transition-colors">
+                        <button onClick={() => {
+                            if (selectedNPC) {
+                                // Phase 3: Trigger memory consolidation when leaving chat
+                                finishChat(selectedNPC.id);
+                                setSelectedNPC(null);
+                            } else {
+                                setOpenApp('none');
+                            }
+                        }} className="p-1 hover:bg-dark-700 rounded-lg transition-colors">
                             <ChevronLeft className="w-4 h-4 text-dark-400" />
                         </button>
                         <h3 className="font-bold text-xs text-green-400">{selectedNPC ? selectedNPC.name : '微信'}</h3>

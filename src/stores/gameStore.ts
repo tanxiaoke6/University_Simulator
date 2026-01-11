@@ -21,7 +21,7 @@ import {
 } from './gameData';
 import { LOCATIONS } from '../data/locations';
 import { CLUBS } from '../data/clubs';
-import { generateDynamicEvent, generateMockEventSync, generateNPCReply } from '../services/aiService';
+import { generateDynamicEvent, generateMockEventSync, generateNPCReply, generateWeeklyDirectorPlan, consolidateMemory } from '../services/aiService';
 
 interface GameActions {
     // Phase Management
@@ -69,6 +69,7 @@ interface GameActions {
 
     // Chat
     sendChatMessage: (npcId: string, message: string) => Promise<void>;
+    finishChat: (npcId: string) => Promise<void>; // Phase 3: Trigger Lazy Consolidation
 
     // Friend Management
     addFriendFromForum: (name: string, personality: string) => void;
@@ -89,6 +90,10 @@ interface GameActions {
     // Notifications
     addNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
     dismissNotification: (id: string) => void;
+
+    // Phase 2: Exam System
+    triggerExam: (courseName: string) => void;
+    submitExamResult: (gpaModifier: number) => void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -99,6 +104,7 @@ const initialState: GameState = {
     config: getDefaultConfig(),
     currentEvent: null,
     currentChatNPC: null,
+    currentExamCourse: null, // Phase 2
     isLoading: false,
     error: null,
 };
@@ -460,6 +466,37 @@ export const useGameStore = create<GameStore>()(
                         stress: Math.max(0, student.attributes.stress - 5)
                     };
 
+                    // --- 2.1. AI Director: Generate Weekly Narrative & Stat Modifiers ---
+                    let aiNarrative = '';
+                    let aiWorldNews = '';
+                    try {
+                        const directorPlan = await generateWeeklyDirectorPlan(config.llm, { ...student, currentDate: nextDate });
+                        aiNarrative = directorPlan.narrative;
+                        aiWorldNews = directorPlan.worldNews;
+
+                        // Apply AI Delta to base attributes
+                        if (directorPlan.statChanges) {
+                            const delta = directorPlan.statChanges;
+                            if (delta.stamina) newAttributes.stamina = Math.min(100, Math.max(0, newAttributes.stamina + delta.stamina));
+                            if (delta.stress) newAttributes.stress = Math.min(100, Math.max(0, newAttributes.stress + delta.stress));
+                            if (delta.iq) newAttributes.iq = Math.min(100, Math.max(0, newAttributes.iq + delta.iq));
+                            if (delta.eq) newAttributes.eq = Math.min(100, Math.max(0, newAttributes.eq + delta.eq));
+                            if (delta.charm) newAttributes.charm = Math.min(100, Math.max(0, newAttributes.charm + delta.charm));
+                            if (delta.luck) newAttributes.luck = Math.min(100, Math.max(0, newAttributes.luck + delta.luck));
+                        }
+
+                        // Store narrative
+                        newNotifications.push({
+                            id: `ai_diary_${Date.now()}`,
+                            type: 'info',
+                            message: `📖 ${aiNarrative}`,
+                            timestamp: Date.now(),
+                            read: false,
+                        });
+                    } catch (directorError) {
+                        console.warn('[AI Director] Failed, using base rules only:', directorError);
+                    }
+
                     // --- 2.5. Process Pending Club Applications ---
                     let updatedClubs = student.clubs;
                     if (student.clubs.pendingClubId) {
@@ -598,6 +635,9 @@ export const useGameStore = create<GameStore>()(
                                 courseActionPoints: state.student.maxCourseActionPoints, // Refresh Course AP
                                 clubs: updatedClubs, // Updated club membership
                                 council: updatedCouncil, // Updated council membership
+                                // Phase 1: AI Director outputs
+                                weeklyDiary: aiNarrative || state.student.weeklyDiary,
+                                worldNews: aiWorldNews || state.student.worldNews,
                             },
                             currentEvent: event,
                             phase: 'event',
@@ -611,6 +651,25 @@ export const useGameStore = create<GameStore>()(
                     import('../stores/questStore').then(({ checkAllQuestTriggers }) => {
                         checkAllQuestTriggers();
                     });
+
+                    // --- 7. Phase 2: Exam Week Triggers ---
+                    // Week 8 = Midterm, Week 16 = Final (or adjust as needed)
+                    if (nextDate.week === 8 || nextDate.week === 16) {
+                        const { student: s } = get();
+                        if (s && s.weeklySchedule && s.weeklySchedule.length > 0) {
+                            // Pick the first course with scheduled classes for exam
+                            const firstCourse = s.weeklySchedule.find(entry => entry.course)?.course;
+                            if (firstCourse) {
+                                setTimeout(() => {
+                                    // After event resolves, trigger exam
+                                    const currentState = get();
+                                    if (currentState.phase === 'playing') {
+                                        get().triggerExam(firstCourse.name);
+                                    }
+                                }, 1000); // Small delay to let event resolve first
+                            }
+                        }
+                    }
 
                 } catch (err: any) {
                     console.error("NextTurn Error", err);
@@ -717,6 +776,61 @@ export const useGameStore = create<GameStore>()(
             },
 
             setError: (error: string | null) => set({ error }),
+
+            // Phase 2: Exam System Actions
+            triggerExam: (courseName: string) => {
+                set({ phase: 'exam', currentExamCourse: courseName });
+            },
+
+            submitExamResult: (gpaModifier: number) => {
+                const { student, currentExamCourse } = get();
+                if (!student || !currentExamCourse) {
+                    set({ phase: 'playing', currentExamCourse: null });
+                    return;
+                }
+
+                // Find the course record and update GPA
+                const courseRecords = { ...student.courseRecords };
+                const courseKey = Object.keys(courseRecords).find(
+                    key => courseRecords[key].courseName === currentExamCourse
+                );
+
+                if (courseKey) {
+                    courseRecords[courseKey] = {
+                        ...courseRecords[courseKey],
+                        grade: gpaModifier,
+                        status: gpaModifier >= 1.0 ? 'passed' : 'failed'
+                    };
+                }
+
+                // Calculate new cumulative GPA
+                const records = Object.values(courseRecords);
+                const totalGPA = records.reduce((sum, r) => sum + r.grade, 0);
+                const newGPA = records.length > 0 ? totalGPA / records.length : student.academic.gpa;
+
+                set((state) => ({
+                    student: state.student ? {
+                        ...state.student,
+                        courseRecords,
+                        academic: {
+                            ...state.student.academic,
+                            gpa: Number(newGPA.toFixed(2))
+                        },
+                        notifications: [
+                            ...state.student.notifications,
+                            {
+                                id: `exam_result_${Date.now()}`,
+                                message: `📝 ${currentExamCourse} 考试完成！GPA: ${gpaModifier.toFixed(1)}`,
+                                type: gpaModifier >= 2.0 ? 'success' as const : 'info' as const,
+                                read: false,
+                                timestamp: Date.now()
+                            }
+                        ]
+                    } : null,
+                    phase: 'playing',
+                    currentExamCourse: null
+                }));
+            },
 
             exportSave: () => {
                 const state = get();
@@ -934,7 +1048,7 @@ export const useGameStore = create<GameStore>()(
                 try {
                     const reply = await generateNPCReply(
                         config.llm,
-                        { name: npc.name, personality: npc.personality, role: npc.role },
+                        { name: npc.name, personality: npc.personality, role: npc.role, longTermMemories: npc.longTermMemories || [] },
                         message,
                         updatedHistory,
                         isGameAssistant
@@ -1098,6 +1212,77 @@ export const useGameStore = create<GameStore>()(
                 }
             },
 
+            // Phase 3: Lazy Consolidation - triggered when player closes chat window
+            finishChat: async (npcId: string) => {
+                const { student, config } = get();
+                if (!student) return;
+
+                const npcIndex = student.npcs.findIndex(n => n.id === npcId);
+                if (npcIndex === -1) return;
+
+                const npc = student.npcs[npcIndex];
+                const chatHistory = npc.chatHistory || [];
+
+                // Only consolidate if history is long enough (Lazy Consolidation threshold)
+                if (chatHistory.length < 10) {
+                    console.log('[Memory] Chat history too short, skipping consolidation');
+                    return;
+                }
+
+                console.log(`[Memory] Consolidating memories for ${npc.name}...`);
+
+                try {
+                    const newMemories = await consolidateMemory(
+                        config.llm,
+                        chatHistory,
+                        npc.name
+                    );
+
+                    if (newMemories.length === 0) {
+                        console.log('[Memory] No significant memories extracted');
+                        return;
+                    }
+
+                    // Update NPC with new long-term memories and trimmed chat history
+                    set((state) => {
+                        if (!state.student) return state;
+                        const newNpcs = [...state.student.npcs];
+                        const idx = newNpcs.findIndex(n => n.id === npcId);
+                        if (idx === -1) return state;
+
+                        const currentNpc = newNpcs[idx];
+                        const existingMemories = currentNpc.longTermMemories || [];
+
+                        newNpcs[idx] = {
+                            ...currentNpc,
+                            longTermMemories: [...existingMemories, ...newMemories].slice(-10), // Keep max 10 memories
+                            chatHistory: chatHistory.slice(-2) // Keep only last 2 messages
+                        };
+
+                        console.log(`[Memory] Added ${newMemories.length} new memories for ${npc.name}`);
+
+                        return {
+                            student: {
+                                ...state.student,
+                                npcs: newNpcs,
+                                notifications: [
+                                    ...state.student.notifications,
+                                    {
+                                        id: `memory_${Date.now()}`,
+                                        message: `💭 ${npc.name}记住了一些关于你的事...`,
+                                        type: 'info' as const,
+                                        read: false,
+                                        timestamp: Date.now()
+                                    }
+                                ]
+                            }
+                        };
+                    });
+                } catch (error) {
+                    console.error('[Memory] Consolidation failed:', error);
+                }
+            },
+
             // Friend Management Actions
             addFriendFromForum: (name: string, personality: string) => set((state) => {
                 if (!state.student) return state;
@@ -1111,6 +1296,7 @@ export const useGameStore = create<GameStore>()(
                     personality,
                     metDate: state.student.currentDate,
                     chatHistory: [],
+                    longTermMemories: [], // Phase 3: 初始化长期记忆
                     moments: [],
                     viewMomentsPermission: true
                 };

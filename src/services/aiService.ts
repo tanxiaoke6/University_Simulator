@@ -107,6 +107,157 @@ Current Student Status:
 `.trim();
 };
 
+// ============ Phase 1: AI Director System ============
+
+/**
+ * Token-optimized state summary for AI Director.
+ * Only extracts key fields to reduce API costs.
+ */
+export const summarizeStateForAI = (student: StudentState): string => {
+    const { attributes, academic, money, flags, currentDate, npcs, eventHistory } = student;
+
+    // Extract high-intimacy NPCs only
+    const topNPCs = npcs
+        .filter(n => n.relationshipScore > 30)
+        .slice(0, 3)
+        .map(n => `${n.name}(${n.role}, 好感${n.relationshipScore})`);
+
+    // Recent events (last 3)
+    const recentEvents = eventHistory
+        .slice(-3)
+        .map(e => e.title)
+        .join('; ');
+
+    return JSON.stringify({
+        time: { year: currentDate.year, semester: currentDate.semester, week: currentDate.week },
+        stats: {
+            iq: attributes.iq,
+            eq: attributes.eq,
+            stamina: attributes.stamina,
+            stress: attributes.stress,
+            charm: attributes.charm,
+            luck: attributes.luck,
+        },
+        academic: { gpa: academic.gpa.toFixed(2), major: academic.major.name, university: academic.universityName },
+        money,
+        flags: { isDating: flags.isDating, hasJob: flags.hasJob, hasScholarship: flags.hasScholarship },
+        topNPCs,
+        recentEvents: recentEvents || '无',
+        weeklyDiary: student.weeklyDiary || null,
+    });
+};
+
+// Director System Prompt - Strict JSON output
+const DIRECTOR_SYSTEM_PROMPT = `你是《大学生活模拟器》的 AI 导演 (Game Director)。
+你的任务是根据玩家当前状态，决定这一周会发生什么故事。
+
+## 规则
+1. 根据玩家的压力、金钱、学业状态，生成合理的叙事。
+2. 校园新闻应反映当前时间节点（开学、考试周、放假等）。
+3. statChanges 是增量值（Delta），会叠加到玩家属性上。
+4. 合理范围：stress ±20, stamina ±30, money ±500, gpa ±0.3
+
+## 输出格式 (Strict JSON)
+Output STRICT JSON only. No markdown. No conversational text. Start directly with '{'.
+{
+  "narrative": "本周发生的故事描述 (50-100字)",
+  "worldNews": "校园/社会新闻头条 (一句话)",
+  "statChanges": { "stress": 10, "money": -200, ... },
+  "specialEventId": null
+}`;
+
+import type { DirectorResponse } from '../types';
+
+const MOCK_DIRECTOR_RESPONSES: DirectorResponse[] = [
+    {
+        narrative: '这周过得平淡无奇，早出晚归地上课、自习。食堂的饭菜一如既往，室友的呼噜声依然响亮。',
+        worldNews: '学校图书馆将延长开放时间至晚上11点',
+        statChanges: { stamina: -10, stress: 5 },
+    },
+    {
+        narrative: '周三晚上和室友一起在宿舍看了场电影，难得的放松时光让你感觉精神焕发。',
+        worldNews: '双十一校园快递爆仓，取件需排队两小时',
+        statChanges: { stress: -15, stamina: 10 },
+    },
+    {
+        narrative: '这周你沉迷学习无法自拔，连续几天泡在图书馆，感觉脑子都要冒烟了。',
+        worldNews: '学校食堂推出新菜品：神秘肉丸套餐',
+        statChanges: { iq: 3, stamina: -20, stress: 15 },
+    },
+];
+
+/**
+ * Generates weekly AI Director plan with narrative and stat changes.
+ * Uses "Base Rules + AI Modifiers" pattern - returns Delta values only.
+ */
+export const generateWeeklyDirectorPlan = async (
+    config: LLMConfig,
+    student: StudentState
+): Promise<DirectorResponse> => {
+    // Offline/No API Key fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        console.log('[AI Director] No API key, using mock response');
+        return MOCK_DIRECTOR_RESPONSES[Math.floor(Math.random() * MOCK_DIRECTOR_RESPONSES.length)];
+    }
+
+    const stateContext = summarizeStateForAI(student);
+    const userPrompt = `当前玩家状态：\n${stateContext}\n\n请生成本周的故事和属性变化。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, DIRECTOR_SYSTEM_PROMPT, userPrompt), 20000);
+
+        // Parse JSON response
+        let jsonStr = response.trim();
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+        // Remove potential leading/trailing content
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
+
+        const data = JSON.parse(jsonStr) as DirectorResponse;
+
+        // Validate and sanitize statChanges
+        const sanitized: DirectorResponse = {
+            narrative: data.narrative || '这周平安无事。',
+            worldNews: data.worldNews || '校园生活一切正常。',
+            statChanges: {},
+            specialEventId: data.specialEventId,
+        };
+
+        // Clamp stat changes to reasonable ranges
+        if (data.statChanges) {
+            const clamp = (val: number | undefined, min: number, max: number) =>
+                val !== undefined ? Math.max(min, Math.min(max, val)) : undefined;
+
+            sanitized.statChanges = {
+                iq: clamp(data.statChanges.iq, -5, 5),
+                eq: clamp(data.statChanges.eq, -5, 5),
+                stamina: clamp(data.statChanges.stamina, -30, 30),
+                stress: clamp(data.statChanges.stress, -20, 20),
+                charm: clamp(data.statChanges.charm, -5, 5),
+                luck: clamp(data.statChanges.luck, -5, 5),
+                money: clamp(data.statChanges.money, -1000, 1000),
+                gpa: clamp(data.statChanges.gpa, -0.3, 0.3),
+            };
+            // Remove undefined values
+            Object.keys(sanitized.statChanges).forEach(key => {
+                if ((sanitized.statChanges as any)[key] === undefined) {
+                    delete (sanitized.statChanges as any)[key];
+                }
+            });
+        }
+
+        return sanitized;
+    } catch (error) {
+        console.error('[AI Director] Generation failed, using fallback:', error);
+        return MOCK_DIRECTOR_RESPONSES[Math.floor(Math.random() * MOCK_DIRECTOR_RESPONSES.length)];
+    }
+};
+
 const SYSTEM_PROMPT = `You are the narrator of a Chinese university life simulator game. 
 Your role is to generate engaging, realistic, and sometimes humorous campus events.
 Response format (JSON only): { "title": "...", "description": "...", "choices": [...] }`;
@@ -367,14 +518,78 @@ const GAME_ASSISTANT_PROMPT = `你是"大学生活模拟器"游戏中的AI助手
 你了解游戏的所有系统：行动力(每周7点)、属性(IQ/EQ/体力/压力/魅力/运气)、证书考试、兼职工作等。
 用友好、简洁的中文回复，可以带表情符号。直接返回回复内容。`;
 
+// ============ Phase 3: NPC Memory System ============
+
+const MEMORY_CONSOLIDATION_PROMPT = `你是一个记忆分析助手。分析以下对话记录，提取1-2个关键事实供NPC长期记住。
+关键事实应该是：
+1. 玩家透露的个人信息（喜好、习惯、目标）
+2. 重要的共同经历或承诺
+3. 情感上有意义的互动
+
+输出格式 (Strict JSON only, no markdown):
+{ "memories": ["记忆1", "记忆2"] }
+
+如果没有值得记住的内容，返回空数组：{ "memories": [] }`;
+
+/**
+ * Phase 3: Consolidates chat history into long-term memories.
+ * Triggered when chatHistory.length > 10 (Lazy Consolidation).
+ */
+export const consolidateMemory = async (
+    config: LLMConfig,
+    chatHistory: { role: 'user' | 'npc'; content: string }[],
+    npcName: string
+): Promise<string[]> => {
+    // Offline fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return [];
+    }
+
+    const historyText = chatHistory
+        .map(msg => `${msg.role === 'user' ? '玩家' : npcName}: ${msg.content}`)
+        .join('\n');
+
+    const userPrompt = `对话记录:\n${historyText}\n\n请提取关键记忆。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, MEMORY_CONSOLIDATION_PROMPT, userPrompt), 15000);
+
+        let jsonStr = response.trim();
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
+
+        const data = JSON.parse(jsonStr);
+        return Array.isArray(data.memories) ? data.memories.slice(0, 3) : [];
+    } catch (error) {
+        console.error('[Memory Consolidation] Failed:', error);
+        return [];
+    }
+};
+
+/**
+ * Generates NPC reply with optional long-term memory injection.
+ */
 export const generateNPCReply = async (
     config: LLMConfig,
-    npc: { name: string; personality: string; role: string },
+    npc: { name: string; personality: string; role: string; longTermMemories?: string[] },
     userMessage: string,
     chatHistory: { role: 'user' | 'npc'; content: string }[],
     isGameAssistant: boolean = false
 ): Promise<string> => {
-    const systemPrompt = isGameAssistant ? GAME_ASSISTANT_PROMPT : NPC_CHAT_SYSTEM_PROMPT;
+    // Build memory-aware system prompt
+    let systemPrompt = isGameAssistant ? GAME_ASSISTANT_PROMPT : NPC_CHAT_SYSTEM_PROMPT;
+
+    // Phase 3: Inject long-term memories into NPC's system prompt
+    if (!isGameAssistant && npc.longTermMemories && npc.longTermMemories.length > 0) {
+        const memoriesText = npc.longTermMemories.join('；');
+        systemPrompt += `\n\n【你对玩家的印象】：${memoriesText}\n请在对话中自然地表现出这些记忆，但不要刻意提及。`;
+    }
 
     // Build conversation context
     const historyContext = chatHistory.slice(-6).map(msg =>
@@ -631,5 +846,240 @@ export const generateNPCProfile = async (
     } catch (error) {
         console.error('LLM NPC Profile generation failed:', error);
         return MOCK_PROFILE;
+    }
+};
+
+// ============ Phase 2: Exam System ============
+
+import type { ExamQuestion, ExamResult } from '../types';
+
+const EXAM_SYSTEM_PROMPT = `你是一位中国大学的教授，需要为学生出一套考试题。
+根据课程名称和难度，生成3道单选题。
+难度1-5：1=入门，3=中等，5=挑战性高
+
+输出格式 (Strict JSON only, no markdown):
+{
+  "questions": [
+    { "text": "题目", "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"], "correctIndex": 0 }
+  ]
+}`;
+
+const MOCK_EXAM_QUESTIONS: ExamQuestion[] = [
+    { text: "下列哪个不是面向对象编程的特征？", options: ["A. 封装", "B. 继承", "C. 多态", "D. 递归"], correctIndex: 3 },
+    { text: "HTTP协议默认使用的端口号是？", options: ["A. 21", "B. 22", "C. 80", "D. 443"], correctIndex: 2 },
+    { text: "在数据库中，ACID原则不包括？", options: ["A. 原子性", "B. 一致性", "C. 隔离性", "D. 可扩展性"], correctIndex: 3 },
+];
+
+/**
+ * Phase 2: Generates exam paper with 3 questions based on course and difficulty.
+ */
+export const generateExamPaper = async (
+    config: LLMConfig,
+    courseName: string,
+    difficulty: number
+): Promise<ExamQuestion[]> => {
+    // Offline fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        console.log('[Exam] No API key, using mock questions');
+        return MOCK_EXAM_QUESTIONS;
+    }
+
+    const userPrompt = `课程: ${courseName}\n难度: ${difficulty}/5\n\n请生成3道单选题。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, EXAM_SYSTEM_PROMPT, userPrompt), 20000);
+
+        let jsonStr = response.trim();
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
+
+        const data = JSON.parse(jsonStr);
+        if (!Array.isArray(data.questions) || data.questions.length === 0) {
+            return MOCK_EXAM_QUESTIONS;
+        }
+
+        return data.questions.map((q: any) => ({
+            text: q.text || '未知题目',
+            options: Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'],
+            correctIndex: typeof q.correctIndex === 'number' ? q.correctIndex : 0
+        }));
+    } catch (error) {
+        console.error('[Exam] Question generation failed:', error);
+        return MOCK_EXAM_QUESTIONS;
+    }
+};
+
+const GRADING_SYSTEM_PROMPT = `你是一位批卷的教授。根据学生的答题情况给出评价。
+
+输入: 课程名，学生答案，正确答案
+输出格式 (Strict JSON only, no markdown):
+{
+  "score": 0-100,
+  "gpaModifier": 0.0-4.0,
+  "comment": "教授的一句话评语，带点个性"
+}`;
+
+/**
+ * Phase 2: Grades exam with AI-generated comment.
+ */
+export const gradeExamPaper = async (
+    config: LLMConfig,
+    playerAnswers: number[],
+    correctAnswers: number[],
+    courseName: string
+): Promise<ExamResult> => {
+    // Calculate base score
+    let correct = 0;
+    for (let i = 0; i < playerAnswers.length; i++) {
+        if (playerAnswers[i] === correctAnswers[i]) correct++;
+    }
+    const baseScore = Math.round((correct / correctAnswers.length) * 100);
+    const baseGPA = (correct / correctAnswers.length) * 4.0;
+
+    // Offline fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        const comments = [
+            baseScore >= 80 ? '不错，继续保持！' : baseScore >= 60 ? '及格了，但还需努力。' : '这成绩...下次加油吧。',
+        ];
+        return {
+            score: baseScore,
+            gpaModifier: Number(baseGPA.toFixed(2)),
+            comment: comments[0]
+        };
+    }
+
+    const userPrompt = `课程: ${courseName}
+学生答案: ${JSON.stringify(playerAnswers)}
+正确答案: ${JSON.stringify(correctAnswers)}
+正确题数: ${correct}/${correctAnswers.length}
+
+请给出评分。`;
+
+    try {
+        const response = await withTimeout(callLLM(config, GRADING_SYSTEM_PROMPT, userPrompt), 15000);
+
+        let jsonStr = response.trim();
+        const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+        const jsonStart = jsonStr.indexOf('{');
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonStr = jsonStr.substring(jsonStart, jsonEnd + 1);
+        }
+
+        const data = JSON.parse(jsonStr);
+        return {
+            score: typeof data.score === 'number' ? data.score : baseScore,
+            gpaModifier: typeof data.gpaModifier === 'number' ? Math.min(4.0, Math.max(0, data.gpaModifier)) : baseGPA,
+            comment: data.comment || '考试结束。'
+        };
+    } catch (error) {
+        console.error('[Exam] Grading failed:', error);
+        return {
+            score: baseScore,
+            gpaModifier: Number(baseGPA.toFixed(2)),
+            comment: baseScore >= 60 ? '考试通过了。' : '挂科了，需要补考。'
+        };
+    }
+};
+
+// ============ Phase 4: Autobiography Generation ============
+
+/**
+ * Phase 4: Generates personalized autobiography based on 4 years of university life.
+ * Style adjusts based on IQ (rational) and EQ (emotional).
+ */
+export const generateAutobiography = async (
+    config: LLMConfig,
+    student: StudentState
+): Promise<string> => {
+    const { attributes, academic, npcs, certificates, achievements, eventHistory, flags, money } = student;
+
+    // Determine writing style based on attributes
+    let styleInstruction = '';
+    if (attributes.iq >= 80 && attributes.eq < 60) {
+        styleInstruction = '文风理性、逻辑清晰，像一篇学术论文摘要。';
+    } else if (attributes.eq >= 80 && attributes.iq < 60) {
+        styleInstruction = '文风感性、情感丰富，充满细腻的情感描写。';
+    } else if (attributes.iq >= 70 && attributes.eq >= 70) {
+        styleInstruction = '文风平衡，既有理性思考也有情感表达，娓娓道来。';
+    } else {
+        styleInstruction = '文风朴实、真诚，像和朋友聊天一样自然。';
+    }
+
+    // Gather important NPCs
+    const topFriends = npcs
+        .filter(n => n.relationshipScore > 50)
+        .slice(0, 3)
+        .map(n => `${n.name}(${n.role})`);
+
+    // Gather long-term memories
+    const allMemories = npcs
+        .flatMap(n => n.longTermMemories || [])
+        .slice(0, 5);
+
+    // Recent significant events
+    const significantEvents = eventHistory
+        .slice(-10)
+        .map(e => e.title)
+        .filter(Boolean)
+        .join('、');
+
+    const systemPrompt = `你是一位传记作家，需要为一位刚毕业的大学生撰写一篇回忆录。
+要求：
+1. 第一人称视角
+2. 800字左右
+3. ${styleInstruction}
+4. 融入提供的记忆片段和好友信息
+5. 结尾寄语未来
+
+输出纯文本，不要包含任何格式标记。`;
+
+    const userPrompt = `我的大学档案：
+- 姓名：${student.name}
+- 学校：${academic.universityName}
+- 专业：${academic.major.name}
+- 最终GPA：${academic.gpa.toFixed(2)}
+- 属性：智力${attributes.iq}、情商${attributes.eq}、魅力${attributes.charm}
+- 毕业时存款：¥${money}
+- 证书：${certificates.length > 0 ? certificates.join('、') : '无'}
+- 成就：${achievements.length > 0 ? achievements.join('、') : '无'}
+- 重要好友：${topFriends.length > 0 ? topFriends.join('、') : '独来独往'}
+- 恋爱状态：${flags.isDating ? '有对象' : '单身'}
+- 印象深刻的事：${significantEvents || '平淡的日子'}
+- 关于我的记忆碎片：${allMemories.length > 0 ? allMemories.join('；') : '普通的大学生活'}
+
+请撰写我的大学回忆录。`;
+
+    const mockBio = `四年前，我怀着忐忑的心情踏入${academic.universityName}的校门。那时的我，对未来充满憧憬，却也不知道前方的道路会如何展开。
+
+${academic.major.name}专业的学习，让我体会到了知识的力量。每一次考试前的焦虑，每一次论文截止日期的通宵，都成了现在看来珍贵的记忆。最终，${academic.gpa.toFixed(2)}的GPA虽然${academic.gpa >= 3.0 ? '算不上惊艳，但也让我问心无愧' : '有些遗憾，但我知道我已经尽力了'}。
+
+${topFriends.length > 0 ? `在这里，我遇到了${topFriends.join('、')}。他们是我大学生活中最重要的人，陪我走过了无数个日日夜夜。` : '虽然朋友不算多，但独处的时光让我学会了与自己对话。'}
+
+${flags.isDating ? '更重要的是，我在这里遇到了生命中重要的人，ta让我的大学生活变得完整。' : ''}
+
+站在毕业典礼的舞台上，我知道，这不是结束，而是新的开始。无论未来如何，这四年都将是我人生中最美好的时光之一。
+
+再见了，我的大学。你好，新的人生。`;
+
+    // Offline fallback
+    if (!config.apiKey || config.apiKey.trim() === '') {
+        return mockBio;
+    }
+
+    try {
+        const response = await withTimeout(callLLM(config, systemPrompt, userPrompt), 45000);
+        return response.trim() || mockBio;
+    } catch (error) {
+        console.error('[Autobiography] Generation failed:', error);
+        return mockBio;
     }
 };

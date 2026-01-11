@@ -11,6 +11,15 @@ export default function TaskBoard() {
 
     useEffect(() => {
         if (student) {
+            const weekKey = `${student.currentDate.year}_${student.currentDate.semester}_${student.currentDate.week}`;
+
+            // Check cache first
+            if (student.taskCache && student.taskCache[weekKey]) {
+                setTasks(student.taskCache[weekKey]);
+                return;
+            }
+
+            // Generate new tasks if not cached
             loadTasks();
         }
     }, [student?.currentDate.week]);
@@ -21,6 +30,21 @@ export default function TaskBoard() {
         try {
             const generatedTasks = await generateGameTasks(config.llm, student);
             setTasks(generatedTasks);
+
+            // Cache the tasks
+            const weekKey = `${student.currentDate.year}_${student.currentDate.semester}_${student.currentDate.week}`;
+            useGameStore.setState((state) => {
+                if (!state.student) return state;
+                return {
+                    student: {
+                        ...state.student,
+                        taskCache: {
+                            ...(state.student.taskCache || {}),
+                            [weekKey]: generatedTasks
+                        }
+                    }
+                };
+            });
         } finally {
             setLoading(false);
         }

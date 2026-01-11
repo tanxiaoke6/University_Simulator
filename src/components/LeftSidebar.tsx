@@ -46,6 +46,17 @@ export default function LeftSidebar({ student }: LeftSidebarProps) {
                 </div>
             </div>
 
+            {/* Phase 1: World News Headline */}
+            {student.worldNews && (
+                <div className="glass-card-light p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs">📰</span>
+                        <span className="text-[10px] text-dark-500 uppercase font-bold">校园头条</span>
+                    </div>
+                    <p className="text-xs text-dark-300 leading-relaxed">{student.worldNews}</p>
+                </div>
+            )}
+
             {/* GPA */}
             <div className="glass-card-light p-4">
                 <div className="flex items-center justify-between mb-2">

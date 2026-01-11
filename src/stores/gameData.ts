@@ -399,6 +399,7 @@ export const createInitialStudent = async (
             personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
             metDate: { year: 1, semester: 1, week: 1, day: 1 },
             chatHistory: [],
+            longTermMemories: [],
         });
     }
 
@@ -415,6 +416,7 @@ export const createInitialStudent = async (
             personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
             metDate: { year: 1, semester: 1, week: 1, day: 1 },
             chatHistory: [],
+            longTermMemories: [],
         });
     }
 
@@ -428,6 +430,7 @@ export const createInitialStudent = async (
         personality: '严谨、博学、对学生要求很高',
         metDate: { year: 1, semester: 1, week: 1, day: 1 },
         chatHistory: [],
+        longTermMemories: [],
     });
 
     // 4. One Friend/Rival
@@ -440,6 +443,7 @@ export const createInitialStudent = async (
         personality: '活泼、爱美、喜欢参加社团活动',
         metDate: { year: 1, semester: 1, week: 1, day: 1 },
         chatHistory: [],
+        longTermMemories: [],
     });
 
     // Calculate what day of the week September 1st falls on for the gaokaoYear
@@ -462,6 +466,7 @@ export const createInitialStudent = async (
             personality: '关怀体贴，总是担心你在学校吃不饱，经常叮嘱你多锻炼。',
             metDate: initialDate,
             chatHistory: [],
+            longTermMemories: [],
             moments: [],
             viewMomentsPermission: true
         },
@@ -475,6 +480,7 @@ export const createInitialStudent = async (
             personality: '沉稳内敛，平时话不多，但会在关键时刻给予你人生的指引。',
             metDate: initialDate,
             chatHistory: [],
+            longTermMemories: [],
             moments: [],
             viewMomentsPermission: true
         },
@@ -487,6 +493,7 @@ export const createInitialStudent = async (
             personality: '友好、乐于助人、熟悉一切游戏机制',
             metDate: initialDate,
             chatHistory: [],
+            longTermMemories: [],
             moments: [],
             viewMomentsPermission: true
         }
