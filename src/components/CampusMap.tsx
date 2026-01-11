@@ -164,24 +164,7 @@ export default function CampusMap() {
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 relative z-10">
-                            {/* Club Dashboard Button if Member */}
-                            {isClubMember && (
-                                <button
-                                    onClick={() => setActiveModal('club_dashboard')}
-                                    className="flex items-center justify-between p-5 rounded-xl border border-primary-500/50 bg-primary-900/20 hover:bg-primary-900/40 transition-all group"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-400">
-                                            <Users className="w-5 h-5" />
-                                        </div>
-                                        <div className="text-left">
-                                            <p className="font-bold text-white">进入社团面板</p>
-                                            <p className="text-[11px] text-primary-300 mt-0.5">查看任务、成员与职级</p>
-                                        </div>
-                                    </div>
-                                    <ChevronRight className="w-5 h-5 text-primary-400" />
-                                </button>
-                            )}
+
 
                             {selectedLoc?.actions.map((action, idx) => (
                                 <button

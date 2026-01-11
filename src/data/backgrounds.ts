@@ -101,7 +101,7 @@ export const generateFamilyBackground = (wealth?: FamilyWealth): FamilyBackgroun
     };
 };
 
-// Monthly costs
+// Monthly costs (tuition is semesterly)
 export const MONTHLY_COSTS = {
     tuition: 5000,      // Per semester (September only)
     dorm: 100,          // Monthly
@@ -111,7 +111,7 @@ export const MONTHLY_COSTS = {
 
 // Starting money by wealth
 export const STARTING_MONEY: Record<FamilyWealth, number> = {
-    poor: 3000,
-    middle: 8000,
+    poor: 1000,
+    middle: 5000,
     wealthy: 20000,
 };

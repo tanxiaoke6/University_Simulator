@@ -169,13 +169,17 @@ export type ItemCategory =
     | 'certificate'
     | 'misc';
 
+export type ItemUsageType = 'consumable' | 'equipment' | 'gift' | 'gym_pass' | 'misc';
+
 export interface Item {
     id: string;
     name: string;
     category: ItemCategory;
+    usageType: ItemUsageType;
     description: string;
     value: number;
-    effect?: Partial<Attributes>;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic';
+    effects: ActionEffect[];
 }
 
 export interface Transaction {
@@ -512,15 +516,8 @@ export interface CouncilState {
 }
 
 
-export interface Item {
-    id: string;
-    name: string;
-    category: ItemCategory;
-    description: string;
-    value: number;
-    rarity: 'common' | 'uncommon' | 'rare' | 'epic';
-    effects: ActionEffect[];
-}
+// Duplicate Item interface removed
+
 
 export interface Job {
     id: string;

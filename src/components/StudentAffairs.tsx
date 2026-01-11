@@ -1,85 +1,23 @@
-import { useState } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { CERTIFICATES } from '../data/certificates';
-import { JOBS } from '../data/jobs';
 import {
-    Briefcase,
     GraduationCap,
-    TrendingUp,
     ShieldCheck,
     Brain,
     CheckCircle2,
     XCircle,
-    Search
 } from 'lucide-react';
-import JobBoardModal from './JobBoardModal';
 
 export default function StudentAffairs() {
-    const { student, quitJob, registerForExam } = useGameStore();
-    const [showJobBoard, setShowJobBoard] = useState(false);
+    const { student, registerForExam } = useGameStore();
 
     if (!student) return null;
 
-    const currentJob = JOBS.find(j => j.id === student.currentJobId);
     const pendingExams = student.pendingExams || [];
     const ownedCerts = student.certificates || [];
 
     return (
         <div className="flex flex-col h-full space-y-6 animate-fade-in p-2">
-            {showJobBoard && <JobBoardModal onClose={() => setShowJobBoard(false)} />}
-
-            {/* Section 1: Part-Time Jobs */}
-            <div className="glass-card p-6 bg-dark-900/40 border-dark-800 shadow-xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <Briefcase className="w-24 h-24 rotate-12" />
-                </div>
-
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 rounded-lg bg-green-500/20 text-green-400">
-                        <Briefcase className="w-5 h-5" />
-                    </div>
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-dark-200">勤工俭学 (Part-Time Jobs)</h2>
-                </div>
-
-                {currentJob ? (
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-xl border border-green-500/20 shadow-inner">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-400">
-                                    <TrendingUp className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-white text-base">{currentJob.title}</h3>
-                                    <div className="flex items-center gap-3 mt-1">
-                                        <span className="text-xs text-green-400 font-mono font-bold">¥{currentJob.salary}/周</span>
-                                        <span className="text-[10px] text-dark-500 font-medium">消耗 {currentJob.energyCost}⚡/周</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={quitJob}
-                                className="px-4 py-2 rounded-lg bg-red-600/10 text-red-500 text-xs font-bold border border-red-500/20 hover:bg-red-600/20 transition-all"
-                            >
-                                辞职 (Quit)
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center py-6 gap-4 bg-dark-800/30 rounded-xl border border-dashed border-dark-700">
-                        <div className="text-center">
-                            <p className="text-dark-400 text-sm font-medium">当前没有任何兼职工作</p>
-                            <p className="text-[10px] text-dark-500 mt-1">自强不息，勤劳致富。</p>
-                        </div>
-                        <button
-                            onClick={() => setShowJobBoard(true)}
-                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary-600 text-white text-xs font-bold shadow-lg shadow-primary-500/20 hover:bg-primary-500 transition-all scale-105 active:scale-95"
-                        >
-                            <Search className="w-4 h-4" />
-                            寻找兼职 (Find Job)
-                        </button>
-                    </div>
-                )}
-            </div>
 
             {/* Section 2: Certificate & Honors Wall */}
             <div className="glass-card p-6 bg-dark-900/40 border-dark-800 shadow-xl relative overflow-hidden group">

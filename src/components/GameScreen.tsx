@@ -1,7 +1,6 @@
 // Main Game Screen Component - Iteration 4
 import { useGameStore } from '../stores/gameStore';
 import LeftSidebar from './LeftSidebar';
-import RightSidebar from './RightSidebar';
 import StoryFeed from './StoryFeed';
 import ActionPanel from './ActionPanel';
 import TutorialOverlay, { useTutorial } from './TutorialOverlay';
@@ -14,6 +13,8 @@ import GoalTrackerModal from './GoalTrackerModal';
 import TaskBoard from './TaskBoard';
 import ClassSchedule from './ClassSchedule';
 import ClubManagement from './ClubManagement';
+import Smartphone, { PhoneTrigger } from './phone/Smartphone';
+import MilestoneScreen from './MilestoneScreen';
 
 interface GameScreenProps {
     onOpenSettings: () => void;
@@ -173,11 +174,6 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                 </main>
 
 
-                {/* Right Sidebar - Fixed width, no page scroll */}
-                <aside className="w-80 h-full border-l border-dark-800/50 overflow-y-auto scrollbar-hide shrink-0 bg-dark-950">
-                    <RightSidebar />
-                </aside>
-
                 {/* --- Emergency Recovery & Debug --- */}
                 <div className="absolute bottom-4 left-4 z-[100] flex flex-col items-start gap-2">
                     <div className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold tracking-tighter ${isLoading ? 'bg-amber-500 text-dark-950 animate-pulse' : 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -195,6 +191,13 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                         </button>
                     )}
                 </div>
+                {/* --- Phone System --- */}
+                <PhoneTrigger />
+                <Smartphone />
+
+                {/* --- Milestone Check (Fate Nodes) --- */}
+                <MilestoneScreen />
+
             </div>
         </div >
     );

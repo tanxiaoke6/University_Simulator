@@ -94,6 +94,10 @@ interface GameActions {
     // Phase 2: Exam System
     triggerExam: (courseName: string) => void;
     submitExamResult: (gpaModifier: number) => void;
+
+    // Phase 4: Milestones & Gifting
+    giveGift: (npcId: string, itemId: string) => void;
+    checkFateNode: () => { passed: boolean; message: string } | null;
 }
 
 export type GameStore = GameState & GameActions;
@@ -159,25 +163,33 @@ export const useGameStore = create<GameStore>()(
                             messages.push(`${diff >= 0 ? '获得' : '支付'} ¥${Math.abs(diff)}`);
                         } else if (effect.type === 'attribute') {
                             const attr = effect.target as keyof typeof student.attributes;
-                            const diff = effect.value;
+                            let diff = effect.value;
+
+                            // Diminishing Returns Logic
+                            if (diff > 0 && student.attributes[attr] !== undefined) {
+                                const current = student.attributes[attr];
+                                if (current > 90) diff *= 0.2;
+                                else if (current > 80) diff *= 0.5;
+                            }
+
                             if (student.attributes[attr] !== undefined) {
                                 student.attributes[attr] = Math.min(100, Math.max(0, student.attributes[attr] + diff));
                                 const attrLabels: Record<string, string> = {
                                     stamina: '体力', iq: '智力', eq: '情商', charm: '魅力', luck: '运气', stress: '压力', employability: '就业力'
                                 };
                                 const label = attrLabels[attr] || attr;
-                                messages.push(`${label}${diff >= 0 ? '+' : ''}${diff}`);
+                                messages.push(`${label}${diff >= 0 ? '+' : ''}${diff.toFixed(1)}`);
                             }
                         } else if (effect.type === 'gpa') {
                             const diff = effect.value;
                             student.academic.gpa = Math.min(4.0, Math.max(0, student.academic.gpa + diff));
-                            messages.push(`GPA${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`);
+                            messages.push(`GPA${diff >= 0 ? '+' : ''}${diff.toFixed(3)}`);
                         } else if (effect.type === 'relationship') {
                             const npc = student.npcs.find(n => n.id === effect.target);
                             if (npc) {
-                                const diff = effect.value;
+                                let diff = effect.value;
                                 npc.relationshipScore = Math.min(100, Math.max(-100, npc.relationshipScore + diff));
-                                messages.push(`${npc.name}好感${diff >= 0 ? '+' : ''}${diff}`);
+                                messages.push(`${npc.name}好感${diff >= 0 ? '+' : ''}${diff.toFixed(1)}`);
                             }
                         }
                     });
@@ -214,33 +226,33 @@ export const useGameStore = create<GameStore>()(
 
                 switch (actionType) {
                     case 'study':
-                        effects.push({ type: 'attribute', target: 'iq', value: 2 });
+                        effects.push({ type: 'attribute', target: 'iq', value: 0.2 });
                         effects.push({ type: 'attribute', target: 'stamina', value: -15 });
-                        effects.push({ type: 'attribute', target: 'stress', value: 5 });
-                        effects.push({ type: 'gpa', target: 'gpa', value: 0.05 });
+                        effects.push({ type: 'attribute', target: 'stress', value: 0.5 });
+                        effects.push({ type: 'gpa', target: 'gpa', value: 0.005 });
                         break;
                     case 'socialize':
-                        effects.push({ type: 'attribute', target: 'eq', value: 3 });
+                        effects.push({ type: 'attribute', target: 'eq', value: 0.3 });
                         effects.push({ type: 'attribute', target: 'stamina', value: -10 });
                         effects.push({ type: 'attribute', target: 'money', value: -100 });
                         break;
                     case 'work':
-                        effects.push({ type: 'money', target: 'money', value: 500 });
+                        effects.push({ type: 'money', target: 'money', value: 200 }); // Money was 20 in squish, 200 is original (higher than before but keeping consistency with user request)
                         effects.push({ type: 'attribute', target: 'stamina', value: -20 });
-                        effects.push({ type: 'attribute', target: 'stress', value: 10 });
+                        effects.push({ type: 'attribute', target: 'stress', value: 1.0 });
                         break;
                     case 'relax':
                         effects.push({ type: 'attribute', target: 'stamina', value: 25 });
-                        effects.push({ type: 'attribute', target: 'stress', value: -15 });
+                        effects.push({ type: 'attribute', target: 'stress', value: -1.5 });
                         break;
                     case 'exercise':
                         effects.push({ type: 'attribute', target: 'stamina', value: 10 });
-                        effects.push({ type: 'attribute', target: 'charm', value: 2 });
-                        effects.push({ type: 'attribute', target: 'stress', value: -5 });
+                        effects.push({ type: 'attribute', target: 'charm', value: 0.2 });
+                        effects.push({ type: 'attribute', target: 'stress', value: -0.5 });
                         break;
                     case 'club':
-                        effects.push({ type: 'attribute', target: 'eq', value: 2 });
-                        effects.push({ type: 'attribute', target: 'charm', value: 1 });
+                        effects.push({ type: 'attribute', target: 'eq', value: 0.2 });
+                        effects.push({ type: 'attribute', target: 'charm', value: 0.1 });
                         effects.push({ type: 'attribute', target: 'stamina', value: -10 });
                         break;
                 }
@@ -451,20 +463,36 @@ export const useGameStore = create<GameStore>()(
 
                     const nextDate: GameDate = { year, semester, week, day };
 
-                    // --- 2. Calculate Weekly Updates (Allowance, Stamina, Stress) ---
+                    // --- 2. Calculate Weekly Updates (Allowance, Maintenance, Stamina, Stress) ---
+                    const allowance = student.family.monthlyAllowance;
+                    const maintenanceCost = 250 + (student.family.wealth === 'wealthy' ? 100 : 0); // Basic maintenance x10
+                    const netMoneyChange = allowance - maintenanceCost;
+
                     const transaction = {
-                        id: `allowance_${Date.now()}`,
-                        amount: student.family.monthlyAllowance,
-                        type: 'income' as const,
-                        description: `第 ${week} 周生活费`,
+                        id: `weekly_economy_${Date.now()}`,
+                        amount: netMoneyChange,
+                        type: (netMoneyChange >= 0 ? 'income' : 'expense') as 'income' | 'expense',
+                        description: `第 ${week} 周：生活费 (+¥${allowance}) & 基础开销 (-¥${maintenanceCost})`,
                         timestamp: nextDate
                     };
 
                     const newAttributes = {
                         ...student.attributes,
-                        stamina: Math.min(100, student.attributes.stamina + 20),
-                        stress: Math.max(0, student.attributes.stress - 5)
+                        stamina: Math.min(100, student.attributes.stamina + 30), // Increased recovery
+                        stress: Math.max(0, student.attributes.stress - 1)    // Squished recovery remains
                     };
+
+                    // Stress penalty if in debt
+                    if (student.wallet.balance + netMoneyChange < 0) {
+                        newAttributes.stress = Math.min(100, newAttributes.stress + 10);
+                        newNotifications.push({
+                            id: `debt_warning_${Date.now()}`,
+                            type: 'error',
+                            message: '⚠️ 你已经入不敷出了！沉重的经济压力让你感到窒息。',
+                            timestamp: Date.now(),
+                            read: false,
+                        });
+                    }
 
                     // --- 2.1. AI Director: Generate Weekly Narrative & Stat Modifiers ---
                     let aiNarrative = '';
@@ -590,7 +618,16 @@ export const useGameStore = create<GameStore>()(
                                 // @ts-ignore
                                 if (newAttributes[key] !== undefined) {
                                     // @ts-ignore
-                                    newAttributes[key] = Math.min(100, newAttributes[key] + (val || 0));
+                                    let diff = val * 0.1; // Squished course bonus
+                                    // @ts-ignore
+                                    if (diff > 0) {
+                                        // @ts-ignore
+                                        const current = newAttributes[key];
+                                        if (current > 90) diff *= 0.2;
+                                        else if (current > 80) diff *= 0.5;
+                                    }
+                                    // @ts-ignore
+                                    newAttributes[key] = Math.min(100, Math.max(0, newAttributes[key] + diff));
                                 }
                             });
                         }
@@ -621,9 +658,10 @@ export const useGameStore = create<GameStore>()(
                                     ...state.student.academic,
                                     gpa: newGPA
                                 },
+                                money: state.student.wallet.balance + netMoneyChange,
                                 wallet: {
                                     ...state.student.wallet,
-                                    balance: state.student.wallet.balance + student.family.monthlyAllowance,
+                                    balance: state.student.wallet.balance + netMoneyChange,
                                     transactions: [...state.student.wallet.transactions, transaction]
                                 },
                                 courseRecords: courseRecords, // This contains updated grades/status
@@ -1416,35 +1454,101 @@ export const useGameStore = create<GameStore>()(
             }),
 
             commentOnMoment: (npcId: string, momentId: string, content: string) => set((state) => {
-                if (!state.student) return state;
-
-                const npcIndex = state.student.npcs.findIndex(n => n.id === npcId);
-                if (npcIndex === -1) return state;
-
-                const npc = state.student.npcs[npcIndex];
-                const momentIndex = (npc.moments || []).findIndex(m => m.id === momentId);
-                if (momentIndex === -1) return state;
-
+                if (!state.student) return {};
                 const newNpcs = [...state.student.npcs];
-                const newMoments = [...(npc.moments || [])];
-                const moment = newMoments[momentIndex];
+                const npcIndex = newNpcs.findIndex(n => n.id === npcId);
+                if (npcIndex === -1) return {};
 
-                newMoments[momentIndex] = {
-                    ...moment,
-                    comments: [
-                        ...moment.comments,
-                        {
-                            id: `comment_${Date.now()}`,
-                            author: state.student.name,
-                            content,
-                            timestamp: Date.now()
+                const npc = newNpcs[npcIndex];
+                const newMoments = (npc.moments || []).map(m =>
+                    m.id === momentId
+                        ? {
+                            ...m,
+                            comments: [
+                                ...m.comments,
+                                {
+                                    id: `comment_${Date.now()}`,
+                                    author: state.student!.name,
+                                    content,
+                                    timestamp: Date.now()
+                                }
+                            ]
                         }
-                    ]
-                };
+                        : m
+                );
 
                 newNpcs[npcIndex] = { ...npc, moments: newMoments };
                 return { student: { ...state.student, npcs: newNpcs } };
             }),
+
+            // Phase 4: Gift System
+            giveGift: (npcId: string, itemId: string) => set((state) => {
+                if (!state.student) return {};
+                const inventory = [...(state.student.inventory || [])];
+                const itemIndex = inventory.findIndex(i => i.id === itemId);
+                if (itemIndex === -1) {
+                    get().addNotification('物品不存在！', 'error');
+                    return {};
+                }
+                const item = inventory[itemIndex];
+                if (item.usageType !== 'gift') {
+                    get().addNotification('这个物品不能送给他人。', 'error');
+                    return {};
+                }
+
+                const npcs = [...state.student.npcs];
+                const npcIndex = npcs.findIndex(n => n.id === npcId);
+                if (npcIndex === -1) {
+                    get().addNotification('找不到这个人！', 'error');
+                    return {};
+                }
+
+                // Remove item from inventory
+                inventory.splice(itemIndex, 1);
+
+                // Increase relationship based on item value
+                const relationBonus = Math.floor(item.value / 5) + 3; // Base 3 + value/5
+                npcs[npcIndex] = {
+                    ...npcs[npcIndex],
+                    relationshipScore: Math.min(100, npcs[npcIndex].relationshipScore + relationBonus)
+                };
+
+                get().addNotification(`送给了 ${npcs[npcIndex].name} 一份 ${item.name}，好感度 +${relationBonus}!`, 'success');
+                return { student: { ...state.student, inventory, npcs } };
+            }),
+
+            // Phase 4: Fate Node Check (Week 20/40/60)
+            checkFateNode: () => {
+                const state = get();
+                if (!state.student) return null;
+                const week = state.student.currentDate.week;
+
+                // Only trigger at specific milestone weeks
+                if (![20, 40, 60].includes(week)) return null;
+
+                const attrs = state.student.attributes;
+                const gpa = state.student.academic.gpa;
+                const money = state.student.money;
+
+                // Define thresholds for each milestone
+                const thresholds: Record<number, { gpa: number; avgAttr: number; money: number }> = {
+                    20: { gpa: 2.5, avgAttr: 40, money: 500 },   // 第一学年结束
+                    40: { gpa: 2.8, avgAttr: 55, money: 1000 },  // 第二学年结束
+                    60: { gpa: 3.0, avgAttr: 70, money: 2000 },  // 第三学年结束
+                };
+
+                const req = thresholds[week];
+                if (!req) return null;
+
+                const avgAttr = (attrs.iq + attrs.eq + attrs.charm) / 3;
+                const passed = gpa >= req.gpa && avgAttr >= req.avgAttr && money >= req.money;
+
+                const message = passed
+                    ? `🎉 恭喜！你在第 ${week} 周的考核中透台，继续加油！`
+                    : `⚠️ 你在第 ${week} 周的考核中未达标。要求: GPA≥${req.gpa}, 平均属性≥${req.avgAttr}, 资金≥¥${req.money}`;
+
+                return { passed, message };
+            },
         }),
         {
             name: 'university-simulator-save',

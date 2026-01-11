@@ -41,7 +41,7 @@ export default function ActionPanel() {
             </div>
 
             {/* Next Turn Button */}
-            <div className="flex items-center justify-between pt-4 border-t border-dark-800/50">
+            <div className="flex items-center justify-between pt-4 border-t border-dark-800/50 pr-20">
                 <div className="flex items-center gap-2 text-dark-500 text-xs text-balance">
                     <Calendar className="w-4 h-4" />
                     <span>第 {student.currentDate.week} 周 {['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'][student.currentDate.day]} / {student.currentDate.semester === 1 ? '上学期' : '下学期'}</span>

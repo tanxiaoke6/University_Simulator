@@ -283,6 +283,11 @@ const parseEventResponse = (
             }),
         }));
 
+        if (choices.length === 0) {
+            console.warn('LLM generated event with no choices, falling back to mock.');
+            return null;
+        }
+
         return {
             id: generateId(),
             type: 'dynamic',
@@ -297,6 +302,7 @@ const parseEventResponse = (
         return null;
     }
 };
+
 
 // Main API call function
 export const callLLM = async (
@@ -432,11 +438,13 @@ export interface ForumComment {
 
 export interface ForumPost {
     id: string;
+    title: string;
     content: string;
     author: string;
     likes: number;
     liked: boolean;
     time: string;
+    tag: string;
     comments: ForumComment[];
 }
 
@@ -460,11 +468,13 @@ export const generateForumPosts = async (
     if (!config.apiKey || config.apiKey.trim() === '') {
         return MOCK_FORUM_POSTS.map((content, i) => ({
             id: `forum_${i}`,
+            title: content.substring(0, 20) + '...',
             content,
             author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
             likes: Math.floor(Math.random() * 50),
             liked: false,
             time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+            tag: '校园',
             comments: []
         }));
     }
@@ -482,25 +492,32 @@ export const generateForumPosts = async (
             posts = MOCK_FORUM_POSTS;
         }
 
-        return posts.map((content, i) => ({
-            id: `forum_${Date.now()}_${i}`,
-            content: typeof content === 'string' ? content : String(content),
-            author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
-            likes: Math.floor(Math.random() * 50),
-            liked: false,
-            time: `${Math.floor(Math.random() * 12) + 1}小时前`,
-            comments: []
-        }));
+        return posts.map((content, i) => {
+            const contentStr = typeof content === 'string' ? content : String(content);
+            return {
+                id: `forum_${Date.now()}_${i}`,
+                title: contentStr.substring(0, 20) + '...',
+                content: contentStr,
+                author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
+                likes: Math.floor(Math.random() * 50),
+                liked: false,
+                time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+                tag: '校园',
+                comments: []
+            };
+        });
     } catch (error) {
         console.error('Forum LLM failed:', error);
         const AUTHORS = ['李明', '王芳', '张伟', '刘洋', '陈静', '赵强', '孙丽', '周杰', '吴娜', '郑云'];
         return MOCK_FORUM_POSTS.map((content, i) => ({
             id: `forum_fallback_${i}`,
+            title: content.substring(0, 20) + '...',
             content,
             author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
             likes: Math.floor(Math.random() * 20),
             liked: false,
             time: `${Math.floor(Math.random() * 12) + 1}小时前`,
+            tag: '校园',
             comments: []
         }));
     }

@@ -46,8 +46,6 @@ export const LOCATIONS: Location[] = [
         color: 'primary',
         actions: [
             { type: 'study', label: '深度学习', cost: 1, stamina: -20, desc: '专注研究学术问题。', bonus: 'GPA/IQ +' },
-            { type: 'work', label: '查找兼职', cost: 0, stamina: 0, desc: '查看告示板上的最新兼职。', bonus: '获得报酬' },
-            { type: 'club', label: 'ACM协会招新', cost: 1, stamina: -15, desc: '加入算法竞赛协会。', bonus: '智力重大提升' },
         ]
     },
     {
@@ -83,7 +81,6 @@ export const LOCATIONS: Location[] = [
         icon: Building2,
         color: 'slate',
         actions: [
-            { type: 'socialize', label: '学生会例会', cost: 1, stamina: -10, desc: '参与学生会组织的讨论与决策。', bonus: 'EQ/领导力 +' },
             { type: 'work', label: '缴纳学费', cost: 0, stamina: 0, desc: '处理每学期的财务事务。', bonus: '金钱 -' },
         ]
     },
@@ -110,8 +107,6 @@ export const LOCATIONS: Location[] = [
         color: 'orange',
         actions: [
             { type: 'relax', label: '悠闲午餐', cost: 0, stamina: 15, desc: '享用一顿美餐，恢复少量体力。', bonus: '不计步数' },
-            { type: 'study', label: '前往超市', cost: 0, stamina: 0, desc: '购买能量饮料、礼物或其他道具。', bonus: '购买物品' },
-            { type: 'club', label: '辩论队招新', cost: 1, stamina: -10, desc: '加入学校辩论队。', bonus: '情商提升' },
         ]
     },
     {
@@ -123,7 +118,6 @@ export const LOCATIONS: Location[] = [
         color: 'green',
         actions: [
             { type: 'exercise', label: '器械训练', cost: 1, stamina: -15, desc: '锻炼身体，提升魅力。', bonus: '体力上限 +2' },
-            { type: 'club', label: '街舞团招新', cost: 1, stamina: -20, desc: '加入校园最火的舞团。', bonus: '魅力大幅提升' },
         ]
     },
     {
@@ -135,7 +129,6 @@ export const LOCATIONS: Location[] = [
         color: 'teal',
         actions: [
             { type: 'relax', label: '湖边散步', cost: 1, stamina: 10, desc: '吹吹晚风，放松心情。', bonus: '压力 -20' },
-            { type: 'socialize', label: '约会', cost: 1, stamina: -10, desc: '邀请喜欢的TA来这里散步。', bonus: '好感度 ++' },
         ]
     },
 
@@ -148,11 +141,8 @@ export const LOCATIONS: Location[] = [
         icon: Store,
         color: 'pink',
         actions: [
-            { type: 'work', label: '餐厅兼职', cost: 1, stamina: -20, desc: '在热门餐厅做服务员。', bonus: '金钱 ++' },
-            { type: 'work', label: '家教中心', cost: 1, stamina: -15, desc: '登记家教信息。', bonus: '金钱 +' },
             { type: 'socialize', label: '看电影', cost: 1, stamina: -5, desc: '去影院看一场最新上映的大片。', bonus: '压力 -15' },
             { type: 'socialize', label: '咖啡探店', cost: 1, stamina: -5, desc: '打卡网红咖啡馆。', bonus: '魅力 +' },
-
         ]
     },
 ];
