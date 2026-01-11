@@ -12,6 +12,7 @@ import {
     Settings as SettingsIcon,
     Globe,
     Smartphone as SmartphoneIcon,
+    Award,
     X
 } from 'lucide-react';
 import AppIcon from './AppIcon';
@@ -21,6 +22,7 @@ import BankApp from './apps/BankApp';
 import ForumApp from './apps/ForumApp';
 import ShopApp from './apps/ShopApp';
 import JobApp from './apps/JobApp';
+import CertApp from './apps/CertApp';
 import SettingsApp from './apps/SettingsApp';
 
 export default function Smartphone() {
@@ -33,8 +35,6 @@ export default function Smartphone() {
         closeApp,
         togglePhone
     } = usePhoneStore();
-
-    if (!student) return null;
 
     // Time from game state
     const hours = new Date().getHours();
@@ -50,9 +50,12 @@ export default function Smartphone() {
             case 'Inventory': return <InventoryApp />;
             case 'Forum': return <ForumApp />;
             case 'Settings': return <SettingsApp />;
+            case 'Certificates': return <CertApp />;
             default: return null;
         }
     };
+
+    // ...
 
     // If an app is open that is "Fullscreen" (like existing Modals), we might want to hide the phone frame or render differently.
     // For this iteration, let's make the phone frame act as a launcher for existing modals if they are too big, 
@@ -143,6 +146,12 @@ export default function Smartphone() {
                                 label="设置"
                                 color="bg-slate-500"
                                 onClick={() => openApp('Settings')}
+                            />
+                            <AppIcon
+                                icon={Award}
+                                label="荣誉"
+                                color="bg-primary-500"
+                                onClick={() => openApp('Certificates')}
                             />
                         </div>
                     )}

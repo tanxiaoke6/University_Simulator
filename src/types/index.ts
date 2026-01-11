@@ -195,12 +195,30 @@ export interface Wallet {
     transactions: Transaction[];
 }
 
-export interface PendingExam {
-    certId: string;
+// Modified Certificate Interface
+export type CertificateCategory = 'language' | 'professional' | 'competition' | 'research' | 'skill';
+
+export interface Certificate {
+    id: string;
     name: string;
-    startWeek: number;
-    finishWeek: number;
-    passChance: number;
+    category: CertificateCategory;
+    difficulty: number; // 1-5, determines maxProgress
+    cost: number;       // Fee
+    rewards: ActionEffect[]; // Core: tangible rewards upon completion
+    majorReq?: string;       // Optional: major restriction
+    prereq?: string;         // Optional: prerequisite certificate ID
+    description: string;
+}
+
+// ActiveProject (replaces PendingExam)
+export interface ActiveProject {
+    id: string;          // Corresponds to Certificate ID
+    name: string;
+    category: CertificateCategory;
+    currentProgress: number; // Current progress
+    maxProgress: number;     // Total progress needed (difficulty * 50)
+    status: 'active' | 'completed';
+    mentorId?: string;       // For research projects
 }
 
 export interface GameNotification {
@@ -381,8 +399,8 @@ export interface StudentState {
     weeklySchedule: ScheduleEntry[]; // Class schedule (15 slots: 5 days × 3 time slots)
     courseRecords: Record<string, CourseRecord>; // Academic history
     plannedAttendance: string[]; // IDs of schedule entries marked for attendance this week
-    certificates: string[];      // IDs of active certificates/buffs
-    pendingExams: PendingExam[]; // Exams in progress
+    certificates: string[];      // IDs of owned certificates
+    activeProjects: ActiveProject[]; // Ongoing projects (exams, competitions, research)
     notifications: GameNotification[]; // System messages
     goals: LifeGoal[];          // Progress towards long-term objectives
     achievements: string[];     // Collected achievements

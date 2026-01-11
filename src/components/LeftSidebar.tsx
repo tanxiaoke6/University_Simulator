@@ -136,6 +136,14 @@ export default function LeftSidebar({ student }: LeftSidebarProps) {
                     color="from-blue-600 to-cyan-500"
                 />
 
+                <StatBar
+                    icon={<GraduationCap className="w-4 h-4" />}
+                    label="科研点 (Research)"
+                    value={academic.researchPoints || 0}
+                    color="from-violet-500 to-purple-400"
+                    max={200}
+                />
+
                 {/* Major Specific Attributes if any */}
                 {attributes.logic !== undefined && (
                     <StatBar

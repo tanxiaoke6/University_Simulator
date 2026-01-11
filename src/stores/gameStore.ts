@@ -12,6 +12,7 @@ import type {
     NPC,
     ClubNPC,
     GameDate,
+    ActiveProject,
 } from '../types';
 import { CERTIFICATES } from '../data/certificates';
 import {
@@ -65,7 +66,8 @@ interface GameActions {
     setError: (error: string | null) => void;
 
     // Async & Honors
-    registerForExam: (certId: string) => void;
+    registerForProject: (certId: string) => void;
+    advanceProject: (projectId: string, amount: number) => void;
 
     // Chat
     sendChatMessage: (npcId: string, message: string) => Promise<void>;
@@ -230,6 +232,41 @@ export const useGameStore = create<GameStore>()(
                         effects.push({ type: 'attribute', target: 'stamina', value: -15 });
                         effects.push({ type: 'attribute', target: 'stress', value: 0.5 });
                         effects.push({ type: 'gpa', target: 'gpa', value: 0.005 });
+
+                        // Phase 8: Research/Project Progress
+                        // If student has active projects, studying advances them.
+                        // We need access to state.student.activeProjects here.
+                        // We can't easily call get().advanceProject for EACH one inside this reducer smoothly without side effects?
+                        // Actually we can, but let's just do it manually or trigger it.
+                        // Better: Iterate active projects and advance them.
+                        if (student.activeProjects.length > 0) {
+                            // Advance Search: random one or all? Let's advance ALL active 'research' or 'competition' projects by a small amount.
+                            // Amount = 5 * IQ/100?
+                            const progressAmount = 5 + (student.attributes.iq * 0.1);
+
+                            // We need to trigger the advancement. Since we are in processAction (which uses set),
+                            // we should ideally update the state directly here.
+                            // However, advanceProject handles completion logic which is complex.
+                            // Let's postpone the project update to a helper or just call the action?
+                            // Calling get().advanceProject might conflict if we are in middle of set? 
+                            // No, processAction calls set inside itself. 
+                            // But we accept we are in the body of processAction.
+                            // Let's queue the advancement updates.
+
+                            setTimeout(() => {
+                                const currentStore = get();
+                                if (currentStore.student) {
+                                    currentStore.student.activeProjects.forEach(p => {
+                                        // Only advance Research/Competition via 'study'?
+                                        if (p.category === 'research' || p.category === 'competition') {
+                                            currentStore.advanceProject(p.id, progressAmount);
+                                        }
+                                        // Certs (Language/Skill) might need 'Library' specifically? 
+                                        // For now, let Study cover all academic stuff.
+                                    });
+                                }
+                            }, 0);
+                        }
                         break;
                     case 'socialize':
                         effects.push({ type: 'attribute', target: 'eq', value: 0.3 });
@@ -972,55 +1009,56 @@ export const useGameStore = create<GameStore>()(
                 return false;
             },
 
-            registerForExam: (certId: string) => set((state) => {
+            registerForProject: (certId: string, mentorId?: string) => set((state) => {
                 const student = state.student;
                 if (!student) return state;
 
                 const cert = CERTIFICATES.find(c => c.id === certId);
                 if (!cert) return state;
 
-                if (student.certificates.includes(certId)) return state;
-                if (student.pendingExams.some(e => e.certId === certId)) return state;
+                // Defensive: ensure arrays exist (for old saves)
+                const currentCerts = student.certificates || [];
+                const currentProjects = student.activeProjects || [];
 
-                // Check money
-                if (student.wallet.balance < cert.cost) return state;
+                if (currentCerts.includes(certId)) return state;
+                if (currentProjects.some(p => p.id === certId)) return state;
 
-                // Check reqStats
-                const meetsRequirements = cert.reqStats.every(req => {
-                    if (req.type === 'attribute') {
-                        const val = (student.attributes as any)[req.target] || (student.academic as any)[req.target] || 0;
-                        return val >= req.value;
-                    }
-                    return true;
-                });
+                const isResearch = cert.category === 'research';
 
-                if (!meetsRequirements) return state;
+                // Check money (Skip for research)
+                if (!isResearch && student.wallet.balance < cert.cost) {
+                    return { error: '余额不足' };
+                }
 
-                // Deduct money
-                const newBalance = student.wallet.balance - cert.cost;
-                const newTransaction = {
-                    id: `exam_reg_${Date.now()}`,
-                    amount: cert.cost,
-                    type: 'expense' as const,
-                    description: `考证报名: ${cert.name}`,
-                    timestamp: student.currentDate
-                };
+                // Check Major Restriction
+                if (cert.majorReq && student.academic.major.category !== cert.majorReq) {
+                    return { error: '专业不符' };
+                }
 
-                // Calculate pass chance (IQ influence)
-                // Base chance is 50%, IQ adds up to 40%, capped at 90%?
-                // Or just use the cert requirements as a baseline.
-                const iqReq = cert.reqStats.find(r => r.target === 'iq')?.value || 0;
-                const iqBonus = (student.attributes.iq - iqReq) * 0.5;
-                const passChance = Math.min(95, Math.max(10, 60 + iqBonus));
+                // Deduct money (Skip for research)
+                let newBalance = student.wallet.balance;
+                let newTransactions = student.wallet.transactions;
 
-                const currentWeekIndex = (student.currentDate.year - 1) * 40 + (student.currentDate.semester - 1) * 20 + student.currentDate.week;
+                if (!isResearch && cert.cost > 0) {
+                    newBalance -= cert.cost;
+                    newTransactions = [...student.wallet.transactions, {
+                        id: `proj_reg_${Date.now()}`,
+                        amount: cert.cost,
+                        type: 'expense' as const,
+                        description: `项目报名: ${cert.name}`,
+                        timestamp: student.currentDate
+                    }];
+                }
 
-                const newPending = {
-                    certId,
+                // Initialize ActiveProject
+                const newProject: ActiveProject = {
+                    id: cert.id,
                     name: cert.name,
-                    startWeek: currentWeekIndex,
-                    finishWeek: currentWeekIndex + cert.duration,
-                    passChance
+                    category: cert.category,
+                    currentProgress: 0,
+                    maxProgress: cert.difficulty * 50,
+                    status: 'active',
+                    mentorId: isResearch ? mentorId : undefined
                 };
 
                 return {
@@ -1029,15 +1067,17 @@ export const useGameStore = create<GameStore>()(
                         wallet: {
                             ...student.wallet,
                             balance: newBalance,
-                            transactions: [...student.wallet.transactions, newTransaction]
+                            transactions: newTransactions
                         },
-                        pendingExams: [...student.pendingExams, newPending],
+                        activeProjects: [...currentProjects, newProject],
                         notifications: [
                             ...student.notifications,
                             {
                                 id: `reg_${Date.now()}`,
-                                message: `已报名 [${cert.name}]。成绩将在 ${cert.duration} 周后公布。`,
-                                type: 'info',
+                                message: isResearch
+                                    ? `已选定导师并开始 [${cert.name}]。请前往图书馆或实验室进行研究。`
+                                    : `已报名 [${cert.name}]。请前往相关场所（如图书馆）推进进度。`,
+                                type: 'success',
                                 read: false,
                                 timestamp: Date.now()
                             }
@@ -1045,6 +1085,62 @@ export const useGameStore = create<GameStore>()(
                     }
                 };
             }),
+
+            advanceProject: (projectId: string, amount: number) => {
+                const { student, applyEffects } = get();
+                if (!student) return;
+
+                const projectIndex = student.activeProjects.findIndex(p => p.id === projectId);
+                if (projectIndex === -1) return;
+
+                const project = student.activeProjects[projectIndex];
+                const newProgress = project.currentProgress + amount;
+
+                // Check completion
+                if (newProgress >= project.maxProgress) {
+                    // Complete: Remove from active, add to owned
+                    const newActive = [...student.activeProjects];
+                    newActive.splice(projectIndex, 1);
+
+                    const newOwned = [...student.certificates, project.id];
+
+                    set(state => ({
+                        student: state.student ? {
+                            ...state.student,
+                            activeProjects: newActive,
+                            certificates: newOwned,
+                            notifications: [
+                                ...state.student.notifications,
+                                {
+                                    id: `proj_comp_${Date.now()}`,
+                                    message: `🎉 恭喜完成 [${project.name}]！`,
+                                    type: 'success',
+                                    read: false,
+                                    timestamp: Date.now()
+                                }
+                            ]
+                        } : null
+                    }));
+
+                    // Apply rewards
+                    const certDef = CERTIFICATES.find(c => c.id === project.id);
+                    if (certDef && certDef.rewards) {
+                        applyEffects(certDef.rewards);
+                    }
+
+                } else {
+                    // Just update progress
+                    const newActive = [...student.activeProjects];
+                    newActive[projectIndex] = { ...project, currentProgress: newProgress };
+
+                    set(state => ({
+                        student: state.student ? {
+                            ...state.student,
+                            activeProjects: newActive
+                        } : null
+                    }));
+                }
+            },
 
             dismissNotification: (id: string) => set((state) => {
                 if (!state.student) return state;
