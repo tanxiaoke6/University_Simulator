@@ -9,23 +9,25 @@ An LLM-powered, deeply immersive text-based simulation game where you experience
 ## ✨ Core Features
 
 ### 🤖 Full AI Integration
-- **Dynamic Event Generation**: Utilizing LLMs to generate real-time campus events based on your current attributes, location, and choices. (e.g., unexpected confessions, lab accidents, or part-time job scams).
-- **Intelligent NPC Interaction**:
+- **Smart Social Ecosystem**:
     - **Free Conversation**: Chat freely with NPCs via the built-in messenger. AI provides unique personalities, memories, and instant feedback.
-    - **Proactive Messaging**: NPCs will text you first based on game context (e.g., start of term, before exams, or festivals).
-    - **Social Media Ecosystem**: NPCs post on their "Moments" feed; you can interact by liking and commenting.
-    - **Profile Generation**: Instantly generate detailed NPC backstories, hidden traits, and relationship advice.
-- **Campus Forum**: A simulated university bulletin board where AI generates trending posts about cafeteria prices, professor gossip, and anonymous confessions.
-- **Dynamic Curriculum**: AI generates logically structured course lists and credit values tailored to your major and year.
-- **Smart Task Generation**: Weekly tasks are dynamically assigned based on your current progress (e.g., focus on GPA if it's lagging).
-- **Personalized Epilogue**: An AI-written biography at graduation summarizes your four-year journey and future career.
+    - **Moments**: Interact with NPC social feeds by liking and commenting.
+    - **Forum Integration**: Users followed on the campus forum are automatically added to your contacts with a special "Tieba Friend" tag.
+- **Brand New PhoneOS 2.0**:
+    - **Draggable UI**: A premium, fully draggable smartphone interface that you can position anywhere on the screen.
+    - **Diverse App Matrix**: Includes apps for Career Goals, Honors (Certs & Research), Bank, Inventory, and Settings.
+- **Dynamic Growth System**:
+    - **Mentor Selection**: Research is now driven by mentorship. Choose the right professor to guide your academic projects.
+    - **Structured Curriculum**: AI-generated course lists tailored to your university tier and major.
+    - **Personalized Epilogue**: A comprehensive, AI-written biography summarizing your four-year journey at graduation.
 
 ### 📊 Deep Growth System
 - **48-Turn Gameplay**: Experience 4 years (8 semesters) with 6 dynamic turns per semester.
-- **Multi-Dimensional Attributes**:
-    - **Core Stats**: IQ, EQ, Charm, Stamina, Stress, and Luck.
-    - **Academic System**: GPA tracking, failure warnings, certificates (CET-4/6, etc.), and scholarships.
-- **Universities & Majors**: Supports 40+ Chinese universities (from top-tier 985/211 to vocational colleges) and 27+ majors, each with unique buffs.
+- **Multi-Dimensional Attributes**: IQ, EQ, Charm, Stamina, Stress, Luck, and Research Points.
+- **Academic Achievement**:
+    - **Hierarchical Certificates**: Logic-based examination rules (e.g., CET-6 requires passing CET-4).
+    - **Research Overhaul**: Accumulate Research Points via map actions and mentor-guided projects.
+- **Universities & Majors**: Supports 40+ Chinese universities and 27+ majors, each with unique development paths.
 
 ### 🏛️ Dual-Track Club & Student Council
 - **Interest Clubs**: Join the Debate Team, ACM Club, or Street Dance Club. Rise through the ranks (Member -> Vice President -> President) and interact with core NPCs.

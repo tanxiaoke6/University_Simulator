@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AppName = 'Forum' | 'JobBoard' | 'Shop' | 'Social' | 'Bank' | 'Inventory' | 'Settings' | 'Certificates';
+export type AppName = 'Forum' | 'JobBoard' | 'Shop' | 'Social' | 'Bank' | 'Inventory' | 'Settings' | 'Certificates' | 'Goals';
 
 interface PhoneState {
     isPhoneOpen: boolean;

@@ -80,13 +80,23 @@ export default function ForumApp() {
                                         <div className="text-[8px] text-slate-400">Lv.14 校园红人</div>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => addFriendFromForum(post.author, 'E')}
-                                    className="p-1 px-2 rounded-full border border-blue-200 text-blue-600 text-[10px] font-bold hover:bg-blue-50 transition-colors flex items-center gap-1"
-                                >
-                                    <UserPlus className="w-3 h-3" />
-                                    关注
-                                </button>
+                                {student.npcs.some(n => n.name === post.author) ? (
+                                    <button
+                                        disabled
+                                        className="p-1 px-2 rounded-full border border-slate-200 text-slate-400 text-[10px] font-bold bg-slate-50 flex items-center gap-1 cursor-default"
+                                    >
+                                        <UserPlus className="w-3 h-3" />
+                                        已关注
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => addFriendFromForum(post.author, 'E')}
+                                        className="p-1 px-2 rounded-full border border-blue-200 text-blue-600 text-[10px] font-bold hover:bg-blue-50 transition-colors flex items-center gap-1"
+                                    >
+                                        <UserPlus className="w-3 h-3" />
+                                        关注
+                                    </button>
+                                )}
                             </div>
 
                             <div className="p-3">

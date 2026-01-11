@@ -1,4 +1,4 @@
-import { useGameStore } from '../../stores/gameStore';
+import { useState, useEffect } from 'react';
 import { usePhoneStore } from '../../stores/phoneStore';
 import {
     Signal,
@@ -13,7 +13,9 @@ import {
     Globe,
     Smartphone as SmartphoneIcon,
     Award,
-    X
+    Target,
+    X,
+    GripHorizontal
 } from 'lucide-react';
 import AppIcon from './AppIcon';
 import InventoryApp from './apps/InventoryApp';
@@ -24,9 +26,9 @@ import ShopApp from './apps/ShopApp';
 import JobApp from './apps/JobApp';
 import CertApp from './apps/CertApp';
 import SettingsApp from './apps/SettingsApp';
+import GoalApp from './apps/GoalApp';
 
 export default function Smartphone() {
-    const { student } = useGameStore();
     const {
         isPhoneOpen,
         currentApp,
@@ -35,6 +37,41 @@ export default function Smartphone() {
         closeApp,
         togglePhone
     } = usePhoneStore();
+
+    // Dragging Logic
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        setIsDragging(true);
+        setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDragging) return;
+            setPosition({
+                x: e.clientX - dragStart.x,
+                y: e.clientY - dragStart.y
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, dragStart]);
+
+    // Reset position when phone closes/opens? Optional. keeping position is better UX.
 
     // Time from game state
     const hours = new Date().getHours();
@@ -51,26 +88,32 @@ export default function Smartphone() {
             case 'Forum': return <ForumApp />;
             case 'Settings': return <SettingsApp />;
             case 'Certificates': return <CertApp />;
+            case 'Goals': return <GoalApp />;
             default: return null;
         }
     };
 
-    // ...
-
-    // If an app is open that is "Fullscreen" (like existing Modals), we might want to hide the phone frame or render differently.
-    // For this iteration, let's make the phone frame act as a launcher for existing modals if they are too big, 
-    // or render simple apps inside.
-    // Given existing modals are designed for desktop, let's keep them as "Apps" that might overlay.
-    // However, the PhoneOS goal is to *contain* them. 
-    // Let's try to render them inside the phone screen container.
-
     return (
-        <div className={`fixed bottom-6 right-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isPhoneOpen ? 'translate-y-0 opacity-100' : 'translate-y-[120%] opacity-0 pointer-events-none'}`}>
+        <div
+            className={`fixed bottom-6 right-8 z-50 transition-all duration-300 ease-out ${isPhoneOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none translate-y-20'}`}
+            style={{
+                transform: isPhoneOpen ? `translate(${position.x}px, ${position.y}px)` : undefined,
+            }}
+        >
             {/* Phone Frame */}
-            <div className="relative w-[360px] h-[720px] bg-dark-950 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.8)] border-[8px] border-dark-800 overflow-hidden ring-1 ring-white/10">
+            <div className="relative w-[360px] h-[720px] bg-dark-950 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.8)] border-[8px] border-dark-800 overflow-hidden ring-1 ring-white/10 flex flex-col">
+
+                {/* Top Drag Handle Area */}
+                <div
+                    className="h-6 w-full bg-dark-900 flex items-center justify-center cursor-move hover:bg-dark-800 transition-colors z-50 shrink-0"
+                    onMouseDown={handleMouseDown}
+                    title="按住拖动手机"
+                >
+                    <div className="w-16 h-1 rounded-full bg-slate-600/50" />
+                </div>
 
                 {/* Notch & StatusBar */}
-                <div className="absolute top-0 left-0 right-0 h-8 z-20 flex items-center justify-between px-6 pt-2 text-[10px] font-bold text-white/90">
+                <div className="absolute top-6 left-0 right-0 h-8 z-20 flex items-center justify-between px-6 pt-2 text-[10px] font-bold text-white/90 pointer-events-none">
                     <span>{timeString}</span>
                     <div className="flex items-center gap-1.5">
                         <Signal className="w-3 h-3" />
@@ -80,25 +123,21 @@ export default function Smartphone() {
                 </div>
 
                 {/* Notch Area (Visual interaction) */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-dark-900 rounded-b-2xl z-20" />
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 w-32 h-6 bg-dark-900 rounded-b-2xl z-20 pointer-events-none" />
 
                 {/* Screen Content */}
-                <div className="w-full h-full bg-cover bg-center pt-8 bg-dark-900 overflow-hidden relative"
+                <div className="w-full flex-1 bg-cover bg-center pt-8 bg-dark-900 overflow-hidden relative flex flex-col"
                     style={{ backgroundImage: 'linear-gradient(to bottom, #0f172a, #1e1b4b)' }}
                 >
                     {/* App Content or Home Screen */}
                     {currentApp ? (
                         <div className="w-full h-full flex flex-col bg-dark-950 animate-fade-in relative z-10">
-                            {/* App Header (Fake Navigation) */}
-                            {/* Note: Most apps might want full screen. We provide a 'Home' handle at bottom. */}
-
-                            {/* Render Active App */}
                             <div className="flex-1 overflow-y-auto no-scrollbar relative">
                                 {renderAppContent()}
                             </div>
                         </div>
                     ) : (
-                        <div className="p-6 pt-12 grid grid-cols-4 gap-x-4 gap-y-8 animate-fade-in">
+                        <div className="p-6 pt-12 grid grid-cols-4 gap-x-4 gap-y-8 animate-fade-in content-start">
                             <AppIcon
                                 icon={Briefcase}
                                 label="兼职"
@@ -153,16 +192,22 @@ export default function Smartphone() {
                                 color="bg-primary-500"
                                 onClick={() => openApp('Certificates')}
                             />
+                            <AppIcon
+                                icon={Target}
+                                label="目标"
+                                color="bg-accent-500"
+                                onClick={() => openApp('Goals')}
+                            />
                         </div>
                     )}
 
-                    {/* Home Indicator / Navigation Bar */}
-                    <div className="absolute bottom-2 left-0 right-0 h-10 flex items-center justify-center z-50 pointer-events-none">
-                        <div
-                            className="w-32 h-1.5 bg-white/20 rounded-full cursor-pointer pointer-events-auto hover:bg-white/40 active:scale-95 transition-all backdrop-blur-md"
-                            onClick={closeApp} // Acts as Home Button
-                        />
-                    </div>
+                    {/* Home Button replaced with Bottom Area standard padding, or rely on App's internal back button */}
+                    {/* Removed the large white bar as requested. */}
+                    {/* If user needs to go home, they usually close app via app's own back button or we can add a smaller home area? */}
+                    {/* Existing apps have 'Close' or 'Back' buttons. */}
+                    {/* Let's double check if we need a global "Home" button. */}
+                    {/* The prompt said: "手机界面那个白色的条（点击回到桌面）不需要，帮我删除" implies removing the global home bar. */}
+                    {/* So reliance is on in-app navigation. */}
                 </div>
             </div>
 

@@ -34,7 +34,7 @@ export default function CertApp() {
                 {activeProjects.length > 0 && (
                     <section className="space-y-2">
                         <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">进行中</h3>
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar pb-2">
                             {activeProjects.map(proj => {
                                 const progressPercent = Math.min(100, (proj.currentProgress / proj.maxProgress) * 100);
                                 return (

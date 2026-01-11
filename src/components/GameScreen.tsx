@@ -6,10 +6,10 @@ import ActionPanel from './ActionPanel';
 import TutorialOverlay, { useTutorial } from './TutorialOverlay';
 import CampusMap from './CampusMap';
 import StudentAffairs from './StudentAffairs';
-import { Settings, Loader2, Target, MessageSquare, Map as MapIcon, GraduationCap, Users, Calendar, ClipboardList, Heart } from 'lucide-react';
+import { Settings, Loader2, MessageSquare, Map as MapIcon, GraduationCap, Users, Calendar, ClipboardList, Heart } from 'lucide-react';
 import SchoolCalendar from './SchoolCalendar';
 import { useState } from 'react';
-import GoalTrackerModal from './GoalTrackerModal';
+// import GoalTrackerModal from './GoalTrackerModal'; // Removed in favor of smartphone app
 import TaskBoard from './TaskBoard';
 import ClassSchedule from './ClassSchedule';
 import ClubManagement from './ClubManagement';
@@ -25,7 +25,6 @@ type GameTab = 'campus' | 'feed' | 'affairs' | 'club' | 'schedule' | 'calendar' 
 export default function GameScreen({ onOpenSettings }: GameScreenProps) {
     const { student, isLoading, error } = useGameStore();
     const { showTutorial, completeTutorial } = useTutorial();
-    const [showGoalModal, setShowGoalModal] = useState(false);
     const [activeTab, setActiveTab] = useState<GameTab>('campus');
 
     if (!student) return null;
@@ -33,7 +32,7 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
     return (
         <div className="h-screen flex flex-col bg-dark-950 overflow-hidden font-sans">
             {showTutorial && <TutorialOverlay onComplete={completeTutorial} />}
-            {showGoalModal && <GoalTrackerModal onClose={() => setShowGoalModal(false)} />}
+            {/* {showGoalModal && <GoalTrackerModal onClose={() => setShowGoalModal(false)} />} */}
 
             {/* Top Bar */}
             <header className="h-16 px-6 flex items-center justify-between border-b border-dark-800/50 bg-dark-950/80 backdrop-blur-sm z-30 shrink-0">
@@ -118,13 +117,7 @@ export default function GameScreen({ onOpenSettings }: GameScreenProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowGoalModal(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded-lg transition-colors border border-dark-700 cursor-pointer"
-                    >
-                        <Target className="w-4 h-4 text-accent-400" />
-                        <span className="text-xs font-medium text-dark-200">目标</span>
-                    </button>
+                    {/* Goal modal button removed, moved to phone */}
                     {isLoading && <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />}
                     <button onClick={onOpenSettings} className="p-2 rounded-lg hover:bg-dark-800 transition-colors border border-transparent hover:border-dark-700">
                         <Settings className="w-5 h-5 text-dark-400" />

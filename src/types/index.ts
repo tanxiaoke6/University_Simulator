@@ -261,7 +261,8 @@ export type ActionType =
     | 'relax'
     | 'club'
     | 'date'
-    | 'exercise';
+    | 'exercise'
+    | 'pay_fees';
 
 export interface Action {
     type: ActionType;

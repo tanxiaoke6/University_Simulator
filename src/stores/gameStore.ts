@@ -273,6 +273,10 @@ export const useGameStore = create<GameStore>()(
                         effects.push({ type: 'attribute', target: 'stamina', value: -10 });
                         effects.push({ type: 'attribute', target: 'money', value: -100 });
                         break;
+                    case 'pay_fees': // Special Case: Admin Building - Pay Fees
+                        effects.push({ type: 'money', target: 'money', value: -500 }); // Example: Deduct 500 for fees
+                        effects.push({ type: 'attribute', target: 'stress', value: -0.5 }); // Maybe a small stress reduction for handling it
+                        break;
                     case 'work':
                         effects.push({ type: 'money', target: 'money', value: 200 }); // Money was 20 in squish, 200 is original (higher than before but keeping consistency with user request)
                         effects.push({ type: 'attribute', target: 'stamina', value: -20 });
