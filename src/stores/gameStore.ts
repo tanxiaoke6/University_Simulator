@@ -66,7 +66,8 @@ interface GameActions {
     setError: (error: string | null) => void;
 
     // Async & Honors
-    registerForProject: (certId: string) => void;
+    registerForProject: (certId: string, mentorId?: string) => void;
+    workOnProject: (projectId: string, progressAmount: number) => void;
     advanceProject: (projectId: string, amount: number) => void;
 
     // Chat
@@ -1060,12 +1061,18 @@ export const useGameStore = create<GameStore>()(
                 }
 
                 // Initialize ActiveProject
+                let maxProgress = cert.difficulty * 50;
+                if (cert.difficulty === 2) maxProgress = 100;
+                else if (cert.difficulty === 3) maxProgress = 300;
+                else if (cert.difficulty === 4) maxProgress = 500;
+                else if (cert.difficulty === 5) maxProgress = 1000;
+
                 const newProject: ActiveProject = {
                     id: cert.id,
                     name: cert.name,
                     category: cert.category,
                     currentProgress: 0,
-                    maxProgress: cert.difficulty * 50,
+                    maxProgress: maxProgress,
                     status: 'active',
                     mentorId: isResearch ? mentorId : undefined
                 };
@@ -1094,6 +1101,86 @@ export const useGameStore = create<GameStore>()(
                     }
                 };
             }),
+
+            workOnProject: (projectId: string, progressAmount: number) => {
+                const { student, applyEffects, addNotification } = get();
+                if (!student) return;
+
+                const projectIndex = student.activeProjects.findIndex(p => p.id === projectId);
+                if (projectIndex === -1) return;
+
+                const project = student.activeProjects[projectIndex];
+                const currentWeek = student.currentDate.week;
+                const currentStamina = student.attributes.stamina;
+                const currentAP = student.actionPoints;
+
+                // Atomic resource check
+                if (currentAP < 1) {
+                    addNotification('行动点不足！', 'error');
+                    return;
+                }
+                if (currentStamina < 15) {
+                    addNotification('体力不足！', 'error');
+                    return;
+                }
+                if (project.lastWorkedWeek === currentWeek) {
+                    addNotification('本周已投入过精力！', 'info');
+                    return;
+                }
+
+                const newProgress = project.currentProgress + progressAmount;
+                const isCompleted = newProgress >= project.maxProgress;
+
+                set(state => {
+                    if (!state.student) return state;
+
+                    const newActive = [...state.student.activeProjects];
+                    let newCertificates = [...state.student.certificates];
+                    let newNotifications = [...state.student.notifications];
+
+                    if (isCompleted) {
+                        // Remove from active, add to owned
+                        newActive.splice(projectIndex, 1);
+                        newCertificates.push(project.id);
+                        newNotifications.push({
+                            id: `proj_comp_${Date.now()}`,
+                            message: `🎉 恭喜完成 [${project.name}]！`,
+                            type: 'success',
+                            read: false,
+                            timestamp: Date.now()
+                        });
+                    } else {
+                        // Update existing project with progress AND weekly marker
+                        newActive[projectIndex] = {
+                            ...project,
+                            currentProgress: newProgress,
+                            lastWorkedWeek: currentWeek
+                        };
+                    }
+
+                    return {
+                        student: {
+                            ...state.student,
+                            actionPoints: currentAP - 1,
+                            attributes: {
+                                ...state.student.attributes,
+                                stamina: Math.max(0, currentStamina - 15)
+                            },
+                            activeProjects: newActive,
+                            certificates: newCertificates,
+                            notifications: newNotifications
+                        }
+                    };
+                });
+
+                // Apply rewards if completed
+                if (isCompleted) {
+                    const certDef = CERTIFICATES.find(c => c.id === project.id);
+                    if (certDef && certDef.rewards) {
+                        applyEffects(certDef.rewards);
+                    }
+                }
+            },
 
             advanceProject: (projectId: string, amount: number) => {
                 const { student, applyEffects } = get();

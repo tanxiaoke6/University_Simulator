@@ -10,9 +10,10 @@ import {
     Building2,
     Store,
     Tent,
-    // Briefcase, // Note: Kept if needed later, or remove. The user prompt asked to remove unused.
-    // Heart 
+    Languages,
+    Briefcase,
 } from 'lucide-react';
+
 
 export type LocationCategory = 'academic' | 'living' | 'off_campus';
 
@@ -58,7 +59,7 @@ export const LOCATIONS: Location[] = [
         actions: [
             { type: 'study', label: '参加讲座', cost: 1, stamina: -15, desc: '听取教授的精彩演讲。', bonus: 'IQ/GPA +' },
             { type: 'study', label: '自习钻研', cost: 1, stamina: -20, desc: '独自攻克学术难题。', bonus: '智力/知识点 +' },
-            { type: 'socialize', label: '课间交流', cost: 0, stamina: -5, desc: '与隔壁班同学聊聊八卦。', bonus: '情商提升' },
+            { type: 'socialize', label: '课间交流', cost: 1, stamina: -5, desc: '与隔壁班同学聊聊八卦。', bonus: '情商提升' },
         ]
     },
     {
@@ -81,9 +82,22 @@ export const LOCATIONS: Location[] = [
         icon: Building2,
         color: 'slate',
         actions: [
-            { type: 'pay_fees', label: '缴纳学费', cost: 0, stamina: 0, desc: '缴纳本学期的学杂费。', bonus: '金钱 -' },
+            { type: 'pay_fees', label: '缴纳学费', cost: 1, stamina: 0, desc: '缴纳本学期的学杂费。', bonus: '金钱 -' },
         ]
     },
+    {
+        id: 'language_center',
+        name: '国际语言中心',
+        description: '连接世界的窗口，语言考证与跨文化交流的核心场所。',
+        category: 'academic',
+        icon: Languages,
+        color: 'cyan',
+        actions: [
+            { type: 'socialize', label: '口语角练习', cost: 1, stamina: -10, desc: '与外教和留学生进行英语对话练习。', bonus: '魅力/EQ +' },
+            { type: 'study', label: '全真模考', cost: 1, stamina: -25, desc: '参加四六级/雅思模拟考试，冲刺备考。', bonus: '考证进度 ++' },
+        ]
+    },
+
 
     // Living Zone
     {
@@ -106,7 +120,7 @@ export const LOCATIONS: Location[] = [
         icon: Coffee,
         color: 'orange',
         actions: [
-            { type: 'relax', label: '悠闲午餐', cost: 0, stamina: 15, desc: '享用一顿美餐，恢复少量体力。', bonus: '不计步数' },
+            { type: 'relax', label: '悠闲午餐', cost: 1, stamina: 15, desc: '享用一顿美餐，恢复少量体力。', bonus: '不计步数' },
         ]
     },
     {
@@ -145,4 +159,17 @@ export const LOCATIONS: Location[] = [
             { type: 'socialize', label: '咖啡探店', cost: 1, stamina: -5, desc: '打卡网红咖啡馆。', bonus: '魅力 +' },
         ]
     },
+    {
+        id: 'tech_park',
+        name: '高新科技园',
+        description: '汇聚创新企业与实习机会的前沿阵地，职业发展的起点。',
+        category: 'off_campus',
+        icon: Briefcase,
+        color: 'sky',
+        actions: [
+            { type: 'socialize', label: '企业开放日', cost: 1, stamina: -15, desc: '参观知名企业，拓宽眼界与人脉。', bonus: '就业力 +' },
+            { type: 'study', label: '技能培训班', cost: 1, stamina: -20, desc: '参加职业技能认证的培训课程。', bonus: '证书进度 ++' },
+        ]
+    },
 ];
+

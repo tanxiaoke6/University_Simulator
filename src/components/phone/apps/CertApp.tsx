@@ -37,6 +37,16 @@ export default function CertApp() {
                         <div className="space-y-2 max-h-56 overflow-y-auto no-scrollbar pb-2">
                             {activeProjects.map(proj => {
                                 const progressPercent = Math.min(100, (proj.currentProgress / proj.maxProgress) * 100);
+                                // Get designated location for this project category
+                                const locationMap: Record<string, string> = {
+                                    research: '创新实验室',
+                                    competition: '公共教学楼',
+                                    language: '国际语言中心',
+                                    professional: '高新科技园',
+                                    skill: '中央图书馆',
+                                };
+                                const designatedLocation = locationMap[proj.category] || '校园';
+
                                 return (
                                     <div key={proj.id} className="bg-white p-3 rounded-xl shadow-sm border border-primary-200">
                                         <div className="flex items-center gap-2 mb-2">
@@ -52,7 +62,7 @@ export default function CertApp() {
                                                 style={{ width: `${progressPercent}%` }}
                                             />
                                         </div>
-                                        <p className="text-[9px] text-slate-400 mt-1.5">前往图书馆/实验室进行学习以推进进度</p>
+                                        <p className="text-[9px] text-slate-400 mt-1.5">前往【{designatedLocation}】推进 (每周1次)</p>
                                     </div>
                                 );
                             })}

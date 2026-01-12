@@ -120,26 +120,38 @@ export default function StudentAffairs() {
                         进行中的项目
                     </h3>
                     <div className="grid grid-cols-1 gap-3">
-                        {activeProjects.map(proj => (
-                            <div key={proj.id} className="p-3 bg-dark-800/60 rounded-xl border border-primary-500/30">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="flex items-center gap-2">
-                                        {getIcon(proj.category)}
-                                        <span className="font-bold text-sm text-white">{proj.name}</span>
+                        {activeProjects.map(proj => {
+                            // Get designated location for this project category
+                            const locationMap: Record<string, string> = {
+                                research: '创新实验室',
+                                competition: '公共教学楼',
+                                language: '国际语言中心',
+                                professional: '高新科技园',
+                                skill: '中央图书馆',
+                            };
+                            const designatedLocation = locationMap[proj.category] || '校园';
+
+                            return (
+                                <div key={proj.id} className="p-3 bg-dark-800/60 rounded-xl border border-primary-500/30">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className="flex items-center gap-2">
+                                            {getIcon(proj.category)}
+                                            <span className="font-bold text-sm text-white">{proj.name}</span>
+                                        </div>
+                                        <span className="text-[10px] text-primary-300 font-mono">
+                                            {(proj.currentProgress / proj.maxProgress * 100).toFixed(0)}%
+                                        </span>
                                     </div>
-                                    <span className="text-[10px] text-primary-300 font-mono">
-                                        {(proj.currentProgress / proj.maxProgress * 100).toFixed(0)}%
-                                    </span>
+                                    <div className="h-2 bg-dark-900 rounded-full overflow-hidden mb-1">
+                                        <div
+                                            className="h-full bg-primary-500 transition-all duration-500"
+                                            style={{ width: `${Math.min(100, proj.currentProgress / proj.maxProgress * 100)}%` }}
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-dark-400 text-right">前往【{designatedLocation}】推进 (每周1次)</p>
                                 </div>
-                                <div className="h-2 bg-dark-900 rounded-full overflow-hidden mb-1">
-                                    <div
-                                        className="h-full bg-primary-500 transition-all duration-500"
-                                        style={{ width: `${Math.min(100, proj.currentProgress / proj.maxProgress * 100)}%` }}
-                                    />
-                                </div>
-                                <p className="text-[10px] text-dark-400 text-right">需前往图书馆/实验室等地继续推进</p>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             )}

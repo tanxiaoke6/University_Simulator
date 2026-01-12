@@ -219,6 +219,7 @@ export interface ActiveProject {
     maxProgress: number;     // Total progress needed (difficulty * 50)
     status: 'active' | 'completed';
     mentorId?: string;       // For research projects
+    lastWorkedWeek?: number; // Week number when last worked on (for weekly limit)
 }
 
 export interface GameNotification {
